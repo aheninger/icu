@@ -763,6 +763,7 @@ void RBBITableBuilder::mapLookAheadRules() {
             }
             int32_t ruleNum = node->fVal;     // Set when rule was originally parsed.
             int32_t existingVal = fLookAheadRuleMap->elementAti(ruleNum);
+            (void)existingVal;
             U_ASSERT(existingVal == 0 || existingVal == laSlotForState);
             fLookAheadRuleMap->setElementAt(laSlotForState, ruleNum);
         }
