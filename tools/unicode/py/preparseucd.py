@@ -660,7 +660,7 @@ def ParseUnicodeData(in_file):
         # Remember algorithmic name ranges.
         if "Ideograph" in name:
           prefix = "CJK UNIFIED IDEOGRAPH-"
-          if c == 0x17000: prefix = "TANGUT IDEOGRAPH-"
+          if c == 0x17000 or c == 0x18D00: prefix = "TANGUT IDEOGRAPH-"
           _alg_names_ranges.append([c, end, "han", prefix])
         elif name == "Hangul Syllable":
           _alg_names_ranges.append([c, end, "hangul"])
