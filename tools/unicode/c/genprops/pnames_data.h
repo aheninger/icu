@@ -352,9 +352,10 @@ static const Value VALUES_blk[309] = {
     Value(UBLOCK_YEZIDI, "Yezidi Yezidi"),
 };
 
-static const Value VALUES_ccc[57] = {
+static const Value VALUES_ccc[58] = {
     Value(0, "NR Not_Reordered"),
     Value(1, "OV Overlay"),
+    Value(6, "HANR Han_Reading"),
     Value(7, "NK Nukta"),
     Value(8, "KV Kana_Voicing"),
     Value(9, "VR Virama"),
@@ -869,9 +870,10 @@ static const Value VALUES_NFKC_QC[3] = {
     Value(UNORM_MAYBE, "M Maybe"),
 };
 
-static const Value VALUES_lccc[57] = {
+static const Value VALUES_lccc[58] = {
     Value(0, "NR Not_Reordered"),
     Value(1, "OV Overlay"),
+    Value(6, "HANR Han_Reading"),
     Value(7, "NK Nukta"),
     Value(8, "KV Kana_Voicing"),
     Value(9, "VR Virama"),
@@ -929,9 +931,10 @@ static const Value VALUES_lccc[57] = {
     Value(240, "IS Iota_Subscript"),
 };
 
-static const Value VALUES_tccc[57] = {
+static const Value VALUES_tccc[58] = {
     Value(0, "NR Not_Reordered"),
     Value(1, "OV Overlay"),
+    Value(6, "HANR Han_Reading"),
     Value(7, "NK Nukta"),
     Value(8, "KV Kana_Voicing"),
     Value(9, "VR Virama"),
@@ -1234,7 +1237,7 @@ static const Property PROPERTIES[107] = {
     Property(UCHAR_EXTENDED_PICTOGRAPHIC, "ExtPict Extended_Pictographic"),
     Property(UCHAR_BIDI_CLASS, "bc Bidi_Class", VALUES_bc, 23),
     Property(UCHAR_BLOCK, "blk Block", VALUES_blk, 309),
-    Property(UCHAR_CANONICAL_COMBINING_CLASS, "ccc Canonical_Combining_Class", VALUES_ccc, 57),
+    Property(UCHAR_CANONICAL_COMBINING_CLASS, "ccc Canonical_Combining_Class", VALUES_ccc, 58),
     Property(UCHAR_DECOMPOSITION_TYPE, "dt Decomposition_Type", VALUES_dt, 18),
     Property(UCHAR_EAST_ASIAN_WIDTH, "ea East_Asian_Width", VALUES_ea, 6),
     Property(UCHAR_GENERAL_CATEGORY, "gc General_Category", VALUES_gc, 30),
@@ -1248,8 +1251,8 @@ static const Property PROPERTIES[107] = {
     Property(UCHAR_NFKD_QUICK_CHECK, "NFKD_QC NFKD_Quick_Check", VALUES_NFKD_QC, 2),
     Property(UCHAR_NFC_QUICK_CHECK, "NFC_QC NFC_Quick_Check", VALUES_NFC_QC, 3),
     Property(UCHAR_NFKC_QUICK_CHECK, "NFKC_QC NFKC_Quick_Check", VALUES_NFKC_QC, 3),
-    Property(UCHAR_LEAD_CANONICAL_COMBINING_CLASS, "lccc Lead_Canonical_Combining_Class", VALUES_lccc, 57),
-    Property(UCHAR_TRAIL_CANONICAL_COMBINING_CLASS, "tccc Trail_Canonical_Combining_Class", VALUES_tccc, 57),
+    Property(UCHAR_LEAD_CANONICAL_COMBINING_CLASS, "lccc Lead_Canonical_Combining_Class", VALUES_lccc, 58),
+    Property(UCHAR_TRAIL_CANONICAL_COMBINING_CLASS, "tccc Trail_Canonical_Combining_Class", VALUES_tccc, 58),
     Property(UCHAR_GRAPHEME_CLUSTER_BREAK, "GCB Grapheme_Cluster_Break", VALUES_GCB, 18),
     Property(UCHAR_SENTENCE_BREAK, "SB Sentence_Break", VALUES_SB, 15),
     Property(UCHAR_WORD_BREAK, "WB Word_Break", VALUES_WB, 23),

@@ -533,6 +533,7 @@ value;ccc;33;CCC33;CCC33
 value;ccc;34;CCC34;CCC34
 value;ccc;35;CCC35;CCC35
 value;ccc;36;CCC36;CCC36
+value;ccc;6;HANR;Han_Reading
 value;ccc;7;NK;Nukta
 value;ccc;8;KV;Kana_Voicing
 value;ccc;84;CCC84;CCC84
@@ -917,6 +918,7 @@ value;lccc;33;CCC33;CCC33
 value;lccc;34;CCC34;CCC34
 value;lccc;35;CCC35;CCC35
 value;lccc;36;CCC36;CCC36
+value;lccc;6;HANR;Han_Reading
 value;lccc;7;NK;Nukta
 value;lccc;8;KV;Kana_Voicing
 value;lccc;84;CCC84;CCC84
@@ -1196,6 +1198,7 @@ value;tccc;33;CCC33;CCC33
 value;tccc;34;CCC34;CCC34
 value;tccc;35;CCC35;CCC35
 value;tccc;36;CCC36;CCC36
+value;tccc;6;HANR;Han_Reading
 value;tccc;7;NK;Nukta
 value;tccc;8;KV;Kana_Voicing
 value;tccc;84;CCC84;CCC84

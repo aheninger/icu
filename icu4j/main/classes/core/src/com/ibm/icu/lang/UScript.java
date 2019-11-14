@@ -1180,14 +1180,15 @@ public final class UScript {
     public static final int getScript(int codepoint){
         if (codepoint >= UCharacter.MIN_VALUE & codepoint <= UCharacter.MAX_VALUE) {
             int scriptX=UCharacterProperty.INSTANCE.getAdditional(codepoint, 0)&UCharacterProperty.SCRIPT_X_MASK;
+            int codeOrIndex=UCharacterProperty.mergeScriptCodeOrIndex(scriptX);
             if(scriptX<UCharacterProperty.SCRIPT_X_WITH_COMMON) {
-                return scriptX;
+                return codeOrIndex;
             } else if(scriptX<UCharacterProperty.SCRIPT_X_WITH_INHERITED) {
                 return UScript.COMMON;
             } else if(scriptX<UCharacterProperty.SCRIPT_X_WITH_OTHER) {
                 return UScript.INHERITED;
             } else {
-                return UCharacterProperty.INSTANCE.m_scriptExtensions_[scriptX&UCharacterProperty.SCRIPT_MASK_];
+                return UCharacterProperty.INSTANCE.m_scriptExtensions_[codeOrIndex];
             }
         }else{
             throw new IllegalArgumentException(Integer.toString(codepoint));
@@ -1209,12 +1210,13 @@ public final class UScript {
      */
     public static final boolean hasScript(int c, int sc) {
         int scriptX=UCharacterProperty.INSTANCE.getAdditional(c, 0)&UCharacterProperty.SCRIPT_X_MASK;
+        int codeOrIndex=UCharacterProperty.mergeScriptCodeOrIndex(scriptX);
         if(scriptX<UCharacterProperty.SCRIPT_X_WITH_COMMON) {
-            return sc==scriptX;
+            return sc==codeOrIndex;
         }
 
         char[] scriptExtensions=UCharacterProperty.INSTANCE.m_scriptExtensions_;
-        int scx=scriptX&UCharacterProperty.SCRIPT_MASK_;  // index into scriptExtensions
+        int scx=codeOrIndex;  // index into scriptExtensions
         if(scriptX>=UCharacterProperty.SCRIPT_X_WITH_OTHER) {
             scx=scriptExtensions[scx+1];
         }
@@ -1258,13 +1260,14 @@ public final class UScript {
     public static final int getScriptExtensions(int c, BitSet set) {
         set.clear();
         int scriptX=UCharacterProperty.INSTANCE.getAdditional(c, 0)&UCharacterProperty.SCRIPT_X_MASK;
+        int codeOrIndex=UCharacterProperty.mergeScriptCodeOrIndex(scriptX);
         if(scriptX<UCharacterProperty.SCRIPT_X_WITH_COMMON) {
-            set.set(scriptX);
-            return scriptX;
+            set.set(codeOrIndex);
+            return codeOrIndex;
         }
 
         char[] scriptExtensions=UCharacterProperty.INSTANCE.m_scriptExtensions_;
-        int scx=scriptX&UCharacterProperty.SCRIPT_MASK_;  // index into scriptExtensions
+        int scx=codeOrIndex;  // index into scriptExtensions
         if(scriptX>=UCharacterProperty.SCRIPT_X_WITH_OTHER) {
             scx=scriptExtensions[scx+1];
         }

@@ -104,11 +104,6 @@ export LD_LIBRARY_PATH=$ICU_ROOT/dbg/icu4c/lib
 
 - cp -v $UNICODE_DATA/security/confusables.txt $ICU4C_UNIDATA
 
-* build ICU (make install)
-  so that the tools build can pick up the new definitions from the installed header files.
-
-  $ICU_ROOT/dbg/icu4c$ echo;echo; date; make -j7 install &> out.txt ; tail -n 30 out.txt ; date
-
 * new constants for new property values
 - preparseucd.py error:
     ValueError: missing uchar.h enum constants for some property values:
@@ -150,7 +145,11 @@ export LD_LIBRARY_PATH=$ICU_ROOT/dbg/icu4c/lib
     (not strictly necessary for NOT_ENCODED scripts)
   $ICU_SRC/tools/unicode$ py/parsescriptmetadata.py $ICU_SRC/icu4c/source/common/unicode/uscript.h $CLDR_SRC/common/properties/scriptMetadata.txt
 
-TODO --------
+* build ICU (make install)
+  to make sure that there are no syntax errors, and
+  so that the tools build can pick up the new definitions from the installed header files.
+
+  $ICU_ROOT/dbg/icu4c$ echo;echo; date; make -j7 install &> out.txt ; tail -n 30 out.txt ; date
 
 * update spoof checker UnicodeSet initializers:
     inclusionPat & recommendedPat in uspoof.cpp
@@ -194,8 +193,12 @@ set(ICU4C_SRC_DIR /usr/local/google/home/mscherer/icu/uni/src/icu4c)
 * generate core properties data files
   $ICU_ROOT/dbg/tools/unicode/c$
     genprops/genprops $ICU_SRC/icu4c
-    genuca/genuca --hanOrder implicit $ICU_SRC/icu4c && \
-    genuca/genuca --hanOrder radical-stroke $ICU_SRC/icu4c
+- tool failure:
+    genprops: Script_Extensions indexes overflow bit field
+    genprops: error parsing or setting values from ppucd.txt line 32696 - U_BUFFER_OVERFLOW_ERROR
+  -> uprops.icu data file format :
+     add two more bits to store a script code or Script_Extensions index
+  -> generator code, C++ & Java runtime, uprops.icu format version 7.7
 - rebuild ICU (make install) & tools
 
 * update uts46test.cpp and UTS46Test.java if there are new characters that are equivalent to
@@ -205,12 +208,7 @@ set(ICU4C_SRC_DIR /usr/local/google/home/mscherer/icu/uni/src/icu4c)
 - nothing new in this Unicode version, no test file to update
 
 * run & fix ICU4C tests
-- update test of default bidi classes:
-  Bidi range \U0001ED00-\U0001ED4F changes default from R to AL,
-  see diffs in DerivedBidiClass.txt
-  + /tsutil/cucdtst/TestUnicodeData enumDefaultsRange() defaultBidi[]
-  + UCharacterTest.java TestIteration() defaultBidi[]
-- Andy handles RBBI & spoof check test failures
+- Andy helps with RBBI & spoof check test failures
 
 * collation: CLDR collation root, UCA DUCET
 
@@ -242,14 +240,10 @@ set(ICU4C_SRC_DIR /usr/local/google/home/mscherer/icu/uni/src/icu4c)
   CLDR common/collation/root.xml <collation type="private-unihan">
   and regenerate (or update in parallel) $ICU_SRC/icu4c/source/data/coll/root.txt
 
-- run genuca, see command line above;
-  deal with
-    Error: Unknown script for first-primary sample character U+119CE on line 29233 of /usr/local/google/home/mscherer/icu/uni/src/icu4c/source/data/unidata/FractionalUCA.txt:
-    FDD1 119CE;	[71 CD 02, 05, 05]	# Nandinagari first primary (compressible)
-        (add the character to genuca.cpp sampleCharsToScripts[])
-  + This time, I added code to genuca.cpp to use uscript_getSampleUnicodeString(script)
-    and cache its values.
-    Works as long as the script metadata is updated before the collation data.
+- run genuca
+  $ICU_ROOT/dbg/tools/unicode/c$
+    genuca/genuca --hanOrder implicit $ICU_SRC/icu4c && \
+    genuca/genuca --hanOrder radical-stroke $ICU_SRC/icu4c
 - rebuild ICU4C
 
 * Unihan collators
