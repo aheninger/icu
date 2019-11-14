@@ -19,8 +19,6 @@ property;Binary;Cased;Cased
 property;Enumerated;ccc;Canonical_Combining_Class
 property;String;cf;Case_Folding
 property;Binary;CI;Case_Ignorable
-property;Miscellaneous;cjkIRG_SSource;kIRG_SSource
-property;Miscellaneous;cjkIRG_UKSource;kIRG_UKSource
 property;Binary;Comp_Ex;Full_Composition_Exclusion
 property;Miscellaneous;Conditional_Case_Mappings;Conditional_Case_Mappings
 property;Binary;CWCF;Changes_When_Casefolded

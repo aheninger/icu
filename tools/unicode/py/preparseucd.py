@@ -88,7 +88,9 @@ _ignored_properties = set((
   "cjkIRG_KPSource",
   "cjkIRG_KSource",
   "cjkIRG_MSource",
+  "cjkIRG_SSource",
   "cjkIRG_TSource",
+  "cjkIRG_UKSource",
   "cjkIRG_USource",
   "cjkIRG_VSource",
   "cjkRSUnicode"
