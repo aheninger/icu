@@ -282,16 +282,12 @@ $HL $CM* ($HY | $BA) $CM* [^$CB]?;
 # (break between HL and SY already disallowed by LB 13 above)
 $SY $CM* $HL;
 
-# LB 22
-($ALPlus | $HL) $CM* $IN;
-^$CM+    $IN;     #  by rule 10, any otherwise unattached CM behaves as AL
-$EX $CM*    $IN;
-($ID | $EB | $EM) $CM*  $IN;
-$IN $CM*    $IN;
-$NU $CM*    $IN;
+# LB 22  Do not break before ellipses
+#
+$LB20NonBreaks $CM*    $IN;
 
 
-# $LB 23
+# LB 23
 #
 ($ALPlus | $HL) $CM* $NU;
 ^$CM+  $NU;       # Rule 10, any otherwise unattached CM behaves as AL
@@ -337,9 +333,9 @@ $PR $CM* ($JL | $JV | $JT | $H2 | $H3);
 $IS $CM* ($ALPlus | $HL);
 
 # LB 30
-($ALPlus | $HL | $NU) $CM* $OP;
-^$CM+ $OP;         # The $CM+ is from rule 10, an unattached CM is treated as AL.
-$CP $CM* ($ALPlus | $HL | $NU);
+($ALPlus | $HL | $NU) $CM* [$OP-[\p{ea=F}\p{ea=W}\p{ea=H}]];
+^$CM+ [$OP-[\p{ea=F}\p{ea=W}\p{ea=H}]];         # The $CM+ is from rule 10, an unattached CM is treated as AL.
+[$CP-[\p{ea=F}\p{ea=W}\p{ea=H}]] $CM* ($ALPlus | $HL | $NU);
 
 # LB 30a  Do not break between regional indicators. Break after pairs of them.
 #         Tricky interaction with LB8a: ZWJ x .   together with ZWJ acting like a CM.
