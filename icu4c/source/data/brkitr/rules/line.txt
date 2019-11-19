@@ -211,7 +211,7 @@ $OP $CM* $SP+ $CM+ $AL_FOLLOW?;    # by rule 10, stand-alone CM behaves as AL
 #        See issue ICU-20303
 
 
-$CanFollowIS = [$BK $CR $LF $NL $SP $ZW $WJ $GL $CL $CP $EX $IS $SY $QU $BA $HY $NS $ALPlus $HL];
+$CanFollowIS = [$BK $CR $LF $NL $SP $ZW $WJ $GL $CL $CP $EX $IS $SY $QU $BA $HY $NS $ALPlus $HL $IN];
 $SP $IS           / [^ $CanFollowIS $NU $CM];
 $SP $IS $CM* $CMX / [^ $CanFollowIS $NU $CM];
 
@@ -285,6 +285,7 @@ $SY $CM* $HL;
 # LB 22  Do not break before ellipses
 #
 $LB20NonBreaks $CM*    $IN;
+$CM+ $IN;
 
 
 # LB 23
@@ -339,9 +340,9 @@ $IS $CM* ($ALPlus | $HL);
 
 # LB 30a  Do not break between regional indicators. Break after pairs of them.
 #         Tricky interaction with LB8a: ZWJ x .   together with ZWJ acting like a CM.
-$RI $CM* $RI                 / [[^$BK $CR $LF $NL $SP $ZW $WJ $CL $CP $EX $IS $SY $GL $QU $BA $HY $NS $CM]];
-$RI $CM* $RI $CM* [$CM-$ZWJ] / [[^$BK $CR $LF $NL $SP $ZW $WJ $CL $CP $EX $IS $SY $GL $QU $BA $HY $NS $CM]];
-$RI $CM* $RI $CM* [$BK $CR $LF $NL $SP $ZW $WJ $CL $CP $EX $IS $SY $GL $QU $BA $HY $NS $ZWJ {eof}];
+$RI $CM* $RI                 / [[^$BK $CR $LF $NL $SP $ZW $WJ $CL $CP $EX $IS $SY $GL $QU $BA $HY $NS $IN $CM]];
+$RI $CM* $RI $CM* [$CM-$ZWJ] / [[^$BK $CR $LF $NL $SP $ZW $WJ $CL $CP $EX $IS $SY $GL $QU $BA $HY $NS $IN $CM]];
+$RI $CM* $RI $CM* [$BK $CR $LF $NL $SP $ZW $WJ $CL $CP $EX $IS $SY $GL $QU $BA $HY $NS $IN $ZWJ {eof}];
 # note: the preceding rule includes {eof} rather than having the last [set] term qualified with '?'
 #       because of the chain-out behavior difference. The rule must chain out only from the [set characters],
 #       not from the preceding $RI or $CM, which it would be able to do if the set were optional.
