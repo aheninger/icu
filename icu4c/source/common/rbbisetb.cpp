@@ -19,7 +19,7 @@
 //                      by the RBBI rules.
 //                   -  compute a set of non-overlapping character ranges
 //                      with all characters within a range belonging to the same
-//                      set of input uniocde sets.
+//                      set of input unicode sets.
 //                   -  Derive a set of non-overlapping UnicodeSet (like things)
 //                      that will correspond to columns in the state table for
 //                      the RBBI execution engine.  All characters within one
@@ -55,12 +55,20 @@ RBBISetBuilder::RBBISetBuilder(RBBIRuleBuilder *rb)
 {
     fRB             = rb;
     fStatus         = rb->fStatus;
-    fRangeList      = 0;
+    fRangeList      = nullptr;
     fMutableTrie    = nullptr;
     fTrie           = nullptr;
     fTrieSize       = 0;
     fGroupCount     = 0;
-    fSawBOF         = FALSE;
+    fSawBOF         = false;
+    fRangeGroups    = new UVector(*fStatus);
+    if (fRangeGroups == nullptr) {
+        *fStatus = U_MEMORY_ALLOCATION_ERROR;
+    }
+    if (U_FAILURE(*fStatus)) {
+        return;
+    }
+    fRangeGroups->setDeleter(uprv_deleteUObject);
 }
 
 
@@ -79,6 +87,7 @@ RBBISetBuilder::~RBBISetBuilder()
         nextRangeDesc      = r->fNext;
         delete r;
     }
+    delete fRangeGroups;
 
     ucptrie_close(fTrie);
     umutablecptrie_close(fMutableTrie);
@@ -199,6 +208,7 @@ void RBBISetBuilder::buildRanges() {
     //               # 2  is reserved - table column 2 is for beginning-in-input
     //               # 3  is the first range list.
     //
+#if 0
     RangeDescriptor *rlSearchRange;
     for (rlRange = fRangeList; rlRange!=0; rlRange=rlRange->fNext) {
         for (rlSearchRange=fRangeList; rlSearchRange != rlRange; rlSearchRange=rlSearchRange->fNext) {
@@ -214,6 +224,49 @@ void RBBISetBuilder::buildRanges() {
             addValToSets(rlRange->fIncludesSets, fGroupCount+2);
         }
     }
+#endif
+    int32_t nextGroupNumber = 3;
+    int32_t rgi;
+    for (rlRange = fRangeList; rlRange!=0; rlRange=rlRange->fNext) {
+        for (rgi=0; rgi < fRangeGroups->size(); ++rgi) {
+            RangeGroup &rg = *static_cast<RangeGroup *>(fRangeGroups->elementAt(rgi));
+            if (rlRange->fIncludesSets->equals(*rg.fIncludesSets)) {
+                rg.fRanges.addElement(rlRange, *fStatus);
+                break;
+            }
+        }
+        if (rgi == fRangeGroups->size()) {
+            // This range (rlRange) does not belong to any already-existing range group.
+            // Create a new group. Assign a category number for non-dictionary ranges.
+            RangeGroup *rg = new RangeGroup(rlRange, *fStatus);
+            fRangeGroups->addElement(rg, *fStatus);
+            if (!rlRange->isDictionaryRange()) {
+                rg->fNum = nextGroupNumber++;
+            }
+        }
+    }
+
+
+    // Assign numbers to the dictionary range groups which weren't numbered
+    // in the first iteration.
+    fDictCategoriesStart = nextGroupNumber;
+    for (rgi=0; rgi < fRangeGroups->size(); ++rgi) {
+        RangeGroup &rg = *static_cast<RangeGroup *>(fRangeGroups->elementAt(rgi));
+        if (rg.fNum == 0) {
+            rg.fNum = nextGroupNumber++;
+        }
+    }
+    U_ASSERT(nextGroupNumber == fRangeGroups->size() + 3);
+    fGroupCount = fRangeGroups->size();
+
+    // Add the group numbers (character category number) to the parse tree expressions
+    // underlying the UnicodeSets in the group. UnicodeSets are transformed to
+    // an Union of the character categories that they contain.
+    for (rgi=0; rgi < fRangeGroups->size(); ++rgi) {
+        RangeGroup &rg = *static_cast<RangeGroup *>(fRangeGroups->elementAt(rgi));
+        addValToSets(rg.fIncludesSets, rg.fNum);
+    }
+
 
     // Handle input sets that contain the special string {eof}.
     //   Column 1 of the state table is reserved for EOF on input.
@@ -224,11 +277,9 @@ void RBBISetBuilder::buildRanges() {
     //     subtree for each UnicodeSet that contains the string {eof}
     //   Because {bof} and {eof} are not a characters in the normal sense,
     //   they doesn't affect the computation of ranges or TRIE.
-    static const UChar eofUString[] = {0x65, 0x6f, 0x66, 0};
-    static const UChar bofUString[] = {0x62, 0x6f, 0x66, 0};
 
-    UnicodeString eofString(eofUString);
-    UnicodeString bofString(bofUString);
+    UnicodeString eofString(u"eof");
+    UnicodeString bofString(u"bof");
     for (ni=0; ; ni++) {        // Loop over each of the UnicodeSets encountered in the input rules
         usetNode = (RBBINode *)this->fRB->fUSetNodes->elementAt(ni);
         if (usetNode==NULL) {
@@ -255,25 +306,21 @@ void RBBISetBuilder::buildRanges() {
 // range group number.
 //
 void RBBISetBuilder::buildTrie() {
-    RangeDescriptor *rlRange;
-
     fMutableTrie = umutablecptrie_open(
                         0,       //  Initial value for all code points.
                         0,       //  Error value for out-of-range input.
                         fStatus);
 
-    bool use8Bits = getNumCharCategories() <= kMaxCharCategoriesFor8BitsTrie;
-    for (rlRange = fRangeList; rlRange!=0 && U_SUCCESS(*fStatus); rlRange=rlRange->fNext) {
-        uint32_t value = rlRange->fNum;
-        if (use8Bits && ((value & RuleBasedBreakIterator::kDictBit) != 0)) {
-            U_ASSERT((value & RuleBasedBreakIterator::kDictBitFor8BitsTrie) == 0);
-            value = RuleBasedBreakIterator::kDictBitFor8BitsTrie | (value & ~RuleBasedBreakIterator::kDictBit);
+    for (int32_t rgi=0; U_SUCCESS(*fStatus) && rgi<fRangeGroups->size(); ++rgi) {
+        RangeGroup *group = static_cast<RangeGroup *>(fRangeGroups->elementAt(rgi));
+        for (int32_t ri=0; ri<group->fRanges.size(); ++ri) {
+            RangeDescriptor *range = static_cast<RangeDescriptor *>(group->fRanges.elementAt(ri));
+            umutablecptrie_setRange(fMutableTrie,
+                                    range->fStartChar,     // Range start
+                                    range->fEndChar,       // Range end (inclusive)
+                                    group->fNum,           // value for range
+                                    fStatus);
         }
-        umutablecptrie_setRange(fMutableTrie,
-                                rlRange->fStartChar,     // Range start
-                                rlRange->fEndChar,       // Range end (inclusive)
-                                value,           // value for range
-                                fStatus);
     }
 }
 
@@ -281,16 +328,34 @@ void RBBISetBuilder::buildTrie() {
 void RBBISetBuilder::mergeCategories(IntPair categories) {
     U_ASSERT(categories.first >= 1);
     U_ASSERT(categories.second > categories.first);
-    for (RangeDescriptor *rd = fRangeList; rd != nullptr; rd = rd->fNext) {
-        int32_t rangeNum = rd->fNum & ~RuleBasedBreakIterator::kDictBit;
-        int32_t rangeDict = rd->fNum & RuleBasedBreakIterator::kDictBit;
-        if (rangeNum == categories.second) {
-            rd->fNum = categories.first | rangeDict;
-        } else if (rangeNum > categories.second) {
-            rd->fNum--;
+    U_ASSERT((categories.first <  fDictCategoriesStart && categories.second <  fDictCategoriesStart) ||
+             (categories.first >= fDictCategoriesStart && categories.second >= fDictCategoriesStart));
+
+    RangeGroup *firstGroup = groupForCategory(categories.first);
+    RangeGroup *secondGroup = groupForCategory(categories.second);
+
+    // Add all ranges from the second group to the first group.
+    for (int i=0; i<secondGroup->fRanges.size(); ++i) {
+        firstGroup->fRanges.addElement(secondGroup->fRanges.elementAt(i), *fStatus);
+    }
+
+    // TODO: verify that this works.
+    fRangeGroups->removeElement(secondGroup);
+
+    // Decrement the category number for all range groups with numbers > categories.second.
+    // Because of the way dictionary category numbers are assigned, elements in
+    // fRangeGroups may not be in category order, so we need to rescan the whole list.
+    for (int rgi=0; rgi<fRangeGroups->size(); ++rgi) {
+        RangeGroup *group = static_cast<RangeGroup *>(fRangeGroups->elementAt(rgi));
+        if (group->fNum > categories.second) {
+            group->fNum--;
         }
     }
+
     --fGroupCount;
+    if (fDictCategoriesStart >= categories.second) {
+        --fDictCategoriesStart;
+    }
 }
 
 
@@ -412,17 +477,42 @@ UBool  RBBISetBuilder::sawBOF() const {
 //                     in the category.
 //------------------------------------------------------------------------
 UChar32  RBBISetBuilder::getFirstChar(int32_t category) const {
-    RangeDescriptor   *rlRange;
-    UChar32            retVal = (UChar32)-1;
-    for (rlRange = fRangeList; rlRange!=0; rlRange=rlRange->fNext) {
-        if (rlRange->fNum == category) {
-            retVal = rlRange->fStartChar;
-            break;
-        }
+    UChar32 retVal = (UChar32)-1;
+    RangeGroup *rg = groupForCategory(category);
+    if (rg != nullptr) {
+        RangeDescriptor *r = static_cast<RangeDescriptor *>(rg->fRanges.firstElement());
+        retVal = r->fStartChar;
     }
     return retVal;
 }
 
+
+//------------------------------------------------------------------------
+//
+//   groupForCategory  Given a runtime RBBI character category number, find
+//                     corresponding RangeGroup.
+//
+//------------------------------------------------------------------------
+RangeGroup *RBBISetBuilder::groupForCategory(int32_t cat) const {
+    for (int rgi=0; rgi<fRangeGroups->size(); ++rgi) {
+        RangeGroup *group = static_cast<RangeGroup *>(fRangeGroups->elementAt(rgi));
+        if (group->fNum == cat) {
+            return group;
+        }
+    }
+    return nullptr;
+}
+
+
+int32_t RBBISetBuilder::numberForRange(RangeDescriptor *range) const {
+    for (int rgi=0; rgi<fRangeGroups->size(); ++rgi) {
+        RangeGroup *group = static_cast<RangeGroup *>(fRangeGroups->elementAt(rgi));
+        if (group->fRanges.contains(range)) {
+            return group->fNum;
+        }
+    }
+    return -1;
+}
 
 
 //------------------------------------------------------------------------
@@ -433,16 +523,14 @@ UChar32  RBBISetBuilder::getFirstChar(int32_t category) const {
 //------------------------------------------------------------------------
 #ifdef RBBI_DEBUG
 void RBBISetBuilder::printRanges() {
-    RangeDescriptor       *rlRange;
-    int                    i;
-
     RBBIDebugPrintf("\n\n Nonoverlapping Ranges ...\n");
-    for (rlRange = fRangeList; rlRange!=0; rlRange=rlRange->fNext) {
-        RBBIDebugPrintf("%2i  %4x-%4x  ", rlRange->fNum, rlRange->fStartChar, rlRange->fEndChar);
+    for (RangeDescriptor *rlRange = fRangeList; rlRange!=0; rlRange=rlRange->fNext) {
+        RBBIDebugPrintf("%2i  %4x-%4x  ", numberForRange(rlRange), rlRange->fStartChar, rlRange->fEndChar);
 
-        for (i=0; i<rlRange->fIncludesSets->size(); i++) {
+        RBBIDebugPrintf("   %4x-%4x  ", rlRange->fStartChar, rlRange->fEndChar);
+        for (int i=0; i<rlRange->fIncludesSets->size(); i++) {
             RBBINode       *usetNode    = (RBBINode *)rlRange->fIncludesSets->elementAt(i);
-            UnicodeString   setName = UNICODE_STRING("anon", 4);
+            UnicodeString   setName {u"anon"};
             RBBINode       *setRef = usetNode->fParent;
             if (setRef != NULL) {
                 RBBINode *varRef = setRef->fParent;
@@ -466,19 +554,18 @@ void RBBISetBuilder::printRanges() {
 //------------------------------------------------------------------------
 #ifdef RBBI_DEBUG
 void RBBISetBuilder::printRangeGroups() {
-    RangeDescriptor       *rlRange;
-    RangeDescriptor       *tRange;
     int                    i;
     int                    lastPrintedGroupNum = 0;
 
+    // TODO: redo this function to iterate the RangeGrouop objects.
     RBBIDebugPrintf("\nRanges grouped by Unicode Set Membership...\n");
-    for (rlRange = fRangeList; rlRange!=0; rlRange=rlRange->fNext) {
-        int groupNum = rlRange->fNum & 0xbfff;
+    for (RangeDescriptor *rlRange = fRangeList; rlRange!=0; rlRange=rlRange->fNext) {
+        int groupNum = numberForRange(rlRange);
         if (groupNum > lastPrintedGroupNum) {
             lastPrintedGroupNum = groupNum;
             RBBIDebugPrintf("%2i  ", groupNum);
 
-            if (rlRange->fNum & RuleBasedBreakIterator::kDictBit) { RBBIDebugPrintf(" <DICT> ");}
+            if (groupNum >= fDictCategoriesStart) { RBBIDebugPrintf(" <DICT> ");}
 
             for (i=0; i<rlRange->fIncludesSets->size(); i++) {
                 RBBINode       *usetNode    = (RBBINode *)rlRange->fIncludesSets->elementAt(i);
@@ -494,8 +581,8 @@ void RBBISetBuilder::printRangeGroups() {
             }
 
             i = 0;
-            for (tRange = rlRange; tRange != 0; tRange = tRange->fNext) {
-                if (tRange->fNum == rlRange->fNum) {
+            for (RangeDescriptor *tRange = rlRange; tRange != 0; tRange = tRange->fNext) {
+                if (numberForRange(tRange) == groupNum) {
                     if (i++ % 5 == 0) {
                         RBBIDebugPrintf("\n    ");
                     }
@@ -561,28 +648,22 @@ void RBBISetBuilder::printSets() {
 //
 //-------------------------------------------------------------------------------------
 
-RangeDescriptor::RangeDescriptor(const RangeDescriptor &other, UErrorCode &status) {
-    int  i;
+RangeDescriptor::RangeDescriptor(const RangeDescriptor &other, UErrorCode &status) :
+        fStartChar(other.fStartChar), fEndChar {other.fEndChar},
+        fIncludesDict{other.fIncludesDict} {
 
-    this->fStartChar    = other.fStartChar;
-    this->fEndChar      = other.fEndChar;
-    this->fNum          = other.fNum;
-    this->fNext         = NULL;
-    UErrorCode oldstatus = status;
-    this->fIncludesSets = new UVector(status);
-    if (U_FAILURE(oldstatus)) {
-        status = oldstatus;
+    if (U_FAILURE(status)) {
+        return;
+    }
+    fIncludesSets = new UVector(status);
+    if (this->fIncludesSets == nullptr) {
+        status = U_MEMORY_ALLOCATION_ERROR;
     }
     if (U_FAILURE(status)) {
         return;
     }
-    /* test for NULL */
-    if (this->fIncludesSets == 0) {
-        status = U_MEMORY_ALLOCATION_ERROR;
-        return;
-    }
 
-    for (i=0; i<other.fIncludesSets->size(); i++) {
+    for (int32_t i=0; i<other.fIncludesSets->size(); i++) {
         this->fIncludesSets->addElement(other.fIncludesSets->elementAt(i), status);
     }
 }
@@ -594,24 +675,13 @@ RangeDescriptor::RangeDescriptor(const RangeDescriptor &other, UErrorCode &statu
 //
 //-------------------------------------------------------------------------------------
 RangeDescriptor::RangeDescriptor(UErrorCode &status) {
-    this->fStartChar    = 0;
-    this->fEndChar      = 0;
-    this->fNum          = 0;
-    this->fNext         = NULL;
-    UErrorCode oldstatus = status;
-    this->fIncludesSets = new UVector(status);
-    if (U_FAILURE(oldstatus)) {
-        status = oldstatus;
-    }
     if (U_FAILURE(status)) {
         return;
     }
-    /* test for NULL */
-    if(this->fIncludesSets == 0) {
+    this->fIncludesSets = new UVector(status);
+    if (this->fIncludesSets == nullptr) {
         status = U_MEMORY_ALLOCATION_ERROR;
-        return;
     }
-
 }
 
 
@@ -622,7 +692,7 @@ RangeDescriptor::RangeDescriptor(UErrorCode &status) {
 //-------------------------------------------------------------------------------------
 RangeDescriptor::~RangeDescriptor() {
     delete  fIncludesSets;
-    fIncludesSets = NULL;
+    fIncludesSets = nullptr;
 }
 
 //-------------------------------------------------------------------------------------
@@ -652,27 +722,22 @@ void RangeDescriptor::split(UChar32 where, UErrorCode &status) {
 
 //-------------------------------------------------------------------------------------
 //
-//   RangeDescriptor::setDictionaryFlag
+//   RangeDescriptor::isDictionaryRange
 //
-//            Character Category Numbers that include characters from
-//            the original Unicode Set named "dictionary" have bit 14
-//            set to 1.  The RBBI runtime engine uses this to trigger
-//            use of the word dictionary.
+//            Test whether this range includes characters from
+//            the original Unicode Set named "dictionary".
 //
-//            This function looks through the Unicode Sets that it
-//            (the range) includes, and sets the bit in fNum when
-//            "dictionary" is among them.
+//            This function looks through the Unicode Sets that
+//            the range includes, checking for one named "dictionary"
 //
 //            TODO:  a faster way would be to find the set node for
 //                   "dictionary" just once, rather than looking it
 //                   up by name every time.
 //
 //-------------------------------------------------------------------------------------
-void RangeDescriptor::setDictionaryFlag() {
-    int i;
-
+bool RangeDescriptor::isDictionaryRange() {
     static const char16_t *dictionary = u"dictionary";
-    for (i=0; i<fIncludesSets->size(); i++) {
+    for (int32_t i=0; i<fIncludesSets->size(); i++) {
         RBBINode *usetNode  = (RBBINode *)fIncludesSets->elementAt(i);
         RBBINode *setRef = usetNode->fParent;
         if (setRef != nullptr) {
@@ -680,11 +745,24 @@ void RangeDescriptor::setDictionaryFlag() {
             if (varRef && varRef->fType == RBBINode::varRef) {
                 const UnicodeString *setName = &varRef->fText;
                 if (setName->compare(dictionary, -1) == 0) {
-                    fNum |= RuleBasedBreakIterator::kDictBit;
+                    return true;
                     break;
                 }
             }
         }
+    }
+    return false;
+}
+
+
+/**
+ * RangeGroup constructor.
+ *   Initial contents of the group are a single range, from the provided RangeDescriptor)
+ */
+RangeGroup::RangeGroup(RangeDescriptor *rd, UErrorCode &status) :
+        fRanges{status}, fIncludesSets(rd->fIncludesSets), fNum(0) {
+    if (U_SUCCESS(status)) {
+        fRanges.addElement(rd, status);
     }
 }
 
