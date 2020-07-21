@@ -38,11 +38,11 @@
 #include "umutex.h"
 #include "uvectr32.h"
 
-#ifdef RBBI_DEBUG
-static UBool gTrace = FALSE;
-#endif
-
 U_NAMESPACE_BEGIN
+
+#ifdef RBBI_DEBUG
+static bool gTrace = false;
+#endif
 
 // The state number of the starting state
 constexpr int32_t START_STATE = 1;
@@ -58,12 +58,17 @@ UOBJECT_DEFINE_RTTI_IMPLEMENTATION(RuleBasedBreakIterator)
 // constructors
 //=======================================================================
 
+static const UnicodeString &emptyString() {
+    static const UnicodeString s;
+    return s;
+};
+
 /**
  * Constructs a RuleBasedBreakIterator that uses the already-created
  * tables object that is passed in as a parameter.
  */
 RuleBasedBreakIterator::RuleBasedBreakIterator(RBBIDataHeader* data, UErrorCode &status)
- : fSCharIter(UnicodeString())
+ : fSCharIter(emptyString())
 {
     init(status);
     fData = new RBBIDataWrapper(data, status); // status checked in constructor
@@ -89,7 +94,7 @@ RuleBasedBreakIterator::RuleBasedBreakIterator(RBBIDataHeader* data, UErrorCode 
 RuleBasedBreakIterator::RuleBasedBreakIterator(const uint8_t *compiledRules,
                        uint32_t       ruleLength,
                        UErrorCode     &status)
- : fSCharIter(UnicodeString())
+ : fSCharIter(emptyString())
 {
     init(status);
     if (U_FAILURE(status)) {
@@ -128,7 +133,7 @@ RuleBasedBreakIterator::RuleBasedBreakIterator(const uint8_t *compiledRules,
 //
 //-------------------------------------------------------------------------------
 RuleBasedBreakIterator::RuleBasedBreakIterator(UDataMemory* udm, UErrorCode &status)
- : fSCharIter(UnicodeString())
+ : fSCharIter(emptyString())
 {
     init(status);
     fData = new RBBIDataWrapper(udm, status); // status checked in constructor
@@ -157,7 +162,7 @@ RuleBasedBreakIterator::RuleBasedBreakIterator(UDataMemory* udm, UErrorCode &sta
 RuleBasedBreakIterator::RuleBasedBreakIterator( const UnicodeString  &rules,
                                                 UParseError          &parseError,
                                                 UErrorCode           &status)
- : fSCharIter(UnicodeString())
+ : fSCharIter(emptyString())
 {
     init(status);
     if (U_FAILURE(status)) {return;}
@@ -181,8 +186,7 @@ RuleBasedBreakIterator::RuleBasedBreakIterator( const UnicodeString  &rules,
 //                           of rules.
 //-------------------------------------------------------------------------------
 RuleBasedBreakIterator::RuleBasedBreakIterator()
- : fSCharIter(UnicodeString())
-{
+ : fSCharIter(emptyString()) {
     UErrorCode status = U_ZERO_ERROR;
     init(status);
 }
@@ -196,7 +200,7 @@ RuleBasedBreakIterator::RuleBasedBreakIterator()
 //-------------------------------------------------------------------------------
 RuleBasedBreakIterator::RuleBasedBreakIterator(const RuleBasedBreakIterator& other)
 : BreakIterator(other),
-  fSCharIter(UnicodeString())
+  fSCharIter(emptyString())
 {
     UErrorCode status = U_ZERO_ERROR;
     this->init(status);
@@ -311,42 +315,21 @@ RuleBasedBreakIterator::operator=(const RuleBasedBreakIterator& that) {
 //
 //-----------------------------------------------------------------------------
 void RuleBasedBreakIterator::init(UErrorCode &status) {
-    fCharIter             = nullptr;
-    fData                 = nullptr;
-    fPosition             = 0;
-    fRuleStatusIndex      = 0;
-    fDone                 = false;
-    fDictionaryCharCount  = 0;
-    fLanguageBreakEngines = nullptr;
-    fUnhandledBreakEngine = nullptr;
-    fBreakCache           = nullptr;
-    fDictionaryCache      = nullptr;
-    fLookAheadMatches     = nullptr;
-
-    // Note: IBM xlC is unable to assign or initialize member fText from UTEXT_INITIALIZER.
-    // fText                 = UTEXT_INITIALIZER;
-    static const UText initializedUText = UTEXT_INITIALIZER;
-    uprv_memcpy(&fText, &initializedUText, sizeof(UText));
-
-   if (U_FAILURE(status)) {
-        return;
-    }
-
     utext_openUChars(&fText, NULL, 0, &status);
     fDictionaryCache = new DictionaryCache(this, status);
     fBreakCache      = new BreakCache(this, status);
-    if (U_SUCCESS(status) && (fDictionaryCache == NULL || fBreakCache == NULL)) {
+    if (fDictionaryCache == NULL || fBreakCache == NULL) {
         status = U_MEMORY_ALLOCATION_ERROR;
     }
 
 #ifdef RBBI_DEBUG
-    static UBool debugInitDone = FALSE;
-    if (debugInitDone == FALSE) {
+    static bool debugInitDone = false;
+    if (debugInitDone == false) {
         char *debugEnv = getenv("U_RBBIDEBUG");
         if (debugEnv && uprv_strstr(debugEnv, "trace")) {
-            gTrace = TRUE;
+            gTrace = true;
         }
-        debugInitDone = TRUE;
+        debugInitDone = true;
     }
 #endif
 }

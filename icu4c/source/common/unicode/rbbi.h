@@ -31,6 +31,7 @@
 #include "unicode/udata.h"
 #include "unicode/parseerr.h"
 #include "unicode/schriter.h"
+#include "unicode/utext.h"
 
 struct UCPTrie;
 
@@ -61,7 +62,7 @@ private:
      * The UText through which this BreakIterator accesses the text
      * @internal (private)
      */
-    UText  fText;
+    UText  fText = UTEXT_INITIALIZER;
 
 #ifndef U_HIDE_INTERNAL_API
 public:
@@ -71,32 +72,32 @@ public:
      * Not for general use; Public only for testing purposes.
      * @internal
      */
-    RBBIDataWrapper    *fData;
+    RBBIDataWrapper    *fData = nullptr;
 private:
 
     /**
       * The current  position of the iterator. Pinned, 0 < fPosition <= text.length.
       * Never has the value UBRK_DONE (-1).
       */
-    int32_t         fPosition;
+    int32_t         fPosition = 0;
 
     /**
       * TODO:
       */
-    int32_t         fRuleStatusIndex;
+    int32_t         fRuleStatusIndex = 0;
 
     /**
      *   Cache of previously determined boundary positions.
      */
     class BreakCache;
-    BreakCache         *fBreakCache;
+    BreakCache         *fBreakCache = nullptr;
 
     /**
      *  Cache of boundary positions within a region of text that has been
      *  sub-divided by dictionary based breaking.
      */
     class DictionaryCache;
-    DictionaryCache *fDictionaryCache;
+    DictionaryCache *fDictionaryCache = nullptr;
 
     /**
      *
@@ -105,7 +106,7 @@ private:
      * handle a given character.
      * @internal (private)
      */
-    UStack              *fLanguageBreakEngines;
+    UStack              *fLanguageBreakEngines = nullptr;
 
     /**
      *
@@ -114,21 +115,21 @@ private:
      * LanguageBreakEngine.
      * @internal (private)
      */
-    UnhandledEngine     *fUnhandledBreakEngine;
+    UnhandledEngine     *fUnhandledBreakEngine = nullptr;
 
     /**
      * Counter for the number of characters encountered with the "dictionary"
      *   flag set.
      * @internal (private)
      */
-    uint32_t            fDictionaryCharCount;
+    uint32_t            fDictionaryCharCount = 0;
 
     /**
      *   A character iterator that refers to the same text as the UText, above.
      *   Only included for compatibility with old API, which was based on CharacterIterators.
      *   Value may be adopted from outside, or one of fSCharIter or fDCharIter, below.
      */
-    CharacterIterator  *fCharIter;
+    CharacterIterator  *fCharIter = nullptr;
 
     /**
      *   When the input text is provided by a UnicodeString, this will point to
@@ -140,12 +141,12 @@ private:
     /**
       * True when iteration has run off the end, and iterator functions should return UBRK_DONE.
       */
-    UBool           fDone;
+    UBool           fDone = false;
 
     /**
      *  Array of look-ahead tentative results.
      */
-    int32_t *fLookAheadMatches;
+    int32_t *fLookAheadMatches = nullptr;
 
     //=======================================================================
     // constructors
