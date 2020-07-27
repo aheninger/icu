@@ -141,7 +141,12 @@ private:
     /**
       * True when iteration has run off the end, and iterator functions should return UBRK_DONE.
       */
-    UBool           fDone = false;
+    UBool fDone = false;
+
+    /**
+     * True if this break iterator was successfully initialized, with no memory allocation failures.
+     */
+    bool fInitialized = false;
 
     /**
      *  Array of look-ahead tentative results.
@@ -270,7 +275,9 @@ public:
      * @return true if both BreakIterators are not same.
      *  @stable ICU 2.0
      */
-    inline UBool operator!=(const BreakIterator& that) const;
+    UBool operator!=(const BreakIterator& that) const {
+        return !operator==(that);
+    };
 
     /**
      * Returns a newly-constructed RuleBasedBreakIterator with the same
@@ -713,16 +720,6 @@ private:
     void dumpTables();
 #endif  /* U_HIDE_INTERNAL_API */
 };
-
-//------------------------------------------------------------------------------
-//
-//   Inline Functions Definitions ...
-//
-//------------------------------------------------------------------------------
-
-inline UBool RuleBasedBreakIterator::operator!=(const BreakIterator& that) const {
-    return !operator==(that);
-}
 
 U_NAMESPACE_END
 

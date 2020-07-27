@@ -227,7 +227,7 @@ void RuleBasedBreakIterator::BreakCache::reset(int32_t pos, int32_t ruleStatus) 
 int32_t  RuleBasedBreakIterator::BreakCache::current() {
     fBI->fPosition = fTextIdx;
     fBI->fRuleStatusIndex = fStatuses[fBufIdx];
-    fBI->fDone = FALSE;
+    fBI->fDone = false;
     return fTextIdx;
 }
 
@@ -566,15 +566,18 @@ UBool RuleBasedBreakIterator::BreakCache::populatePreceding(UErrorCode &status) 
             fSideBuffer.addElement(position, status);
             fSideBuffer.addElement(positionStatusIdx, status);
         }
-    } while (position < fromPosition);
+    } while (U_SUCCESS(status) && position < fromPosition);
+    if (U_FAILURE(status)) {
+        return false;
+    }
 
     // Move boundaries from the side buffer to the main circular buffer.
-    UBool success = FALSE;
+    bool success = false;
     if (!fSideBuffer.isEmpty()) {
         positionStatusIdx = fSideBuffer.popi();
         position = fSideBuffer.popi();
         addPreceding(position, positionStatusIdx, UpdateCachePosition);
-        success = TRUE;
+        success = true;
     }
 
     while (!fSideBuffer.isEmpty()) {
