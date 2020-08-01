@@ -85,6 +85,7 @@ RuleBasedBreakIterator::RuleBasedBreakIterator(RBBIDataHeader* data, UErrorCode 
             return;
         }
     }
+    fInitialized = true;
 }
 
 //
@@ -96,19 +97,16 @@ RuleBasedBreakIterator::RuleBasedBreakIterator(const uint8_t *compiledRules,
                        UErrorCode     &status)
  : fSCharIter(emptyString())
 {
-    init(status);
     if (U_FAILURE(status)) {
         return;
     }
-    if (compiledRules == NULL || ruleLength < sizeof(RBBIDataHeader)) {
-        status = U_ILLEGAL_ARGUMENT_ERROR;
-        return;
-    }
     const RBBIDataHeader *data = (const RBBIDataHeader *)compiledRules;
-    if (data->fLength > ruleLength) {
+    if (compiledRules == nullptr || ruleLength < sizeof(RBBIDataHeader) || data->fLength > ruleLength) {
         status = U_ILLEGAL_ARGUMENT_ERROR;
         return;
     }
+    init(status);
+
     fData = new RBBIDataWrapper(data, RBBIDataWrapper::kDontAdopt, status);
     if(fData == nullptr) {
         status = U_MEMORY_ALLOCATION_ERROR;
@@ -120,12 +118,7 @@ RuleBasedBreakIterator::RuleBasedBreakIterator(const uint8_t *compiledRules,
             status = U_MEMORY_ALLOCATION_ERROR;
         }
     }
-    if (U_FAILURE(status)) {
-        delete fData;
-        fData = nullptr;
-        delete fLookAheadMatches;
-        fLookAheadMatches = nullptr;
-    }
+    fInitialized = U_SUCCESS(status);
 }
 
 
@@ -153,6 +146,7 @@ RuleBasedBreakIterator::RuleBasedBreakIterator(UDataMemory* udm, UErrorCode &sta
             return;
         }
     }
+    fInitialized = U_SUCCESS(status);
 }
 
 
@@ -168,7 +162,10 @@ RuleBasedBreakIterator::RuleBasedBreakIterator( const UnicodeString  &rules,
  : fSCharIter(emptyString())
 {
     init(status);
-    if (U_FAILURE(status)) {return;}
+    if (U_FAILURE(status)) {
+
+        return;
+    }
     RuleBasedBreakIterator *bi = (RuleBasedBreakIterator *)
         RBBIRuleBuilder::createRuleBasedBreakIterator(rules, &parseError, status);
     // Note:  This is a bit awkward.  The RBBI ruleBuilder has a factory method that
@@ -178,6 +175,7 @@ RuleBasedBreakIterator::RuleBasedBreakIterator( const UnicodeString  &rules,
     if (U_SUCCESS(status)) {
         *this = *bi;
         delete bi;
+        fInitialized = true;
     }
 }
 
@@ -192,6 +190,7 @@ RuleBasedBreakIterator::RuleBasedBreakIterator()
  : fSCharIter(emptyString()) {
     UErrorCode status = U_ZERO_ERROR;
     init(status);
+    fInitialized = true;
 }
 
 
@@ -208,6 +207,7 @@ RuleBasedBreakIterator::RuleBasedBreakIterator(const RuleBasedBreakIterator& oth
     UErrorCode status = U_ZERO_ERROR;
     this->init(status);
     *this = other;
+    fInitialized = true;  // TODO: ...
 }
 
 
