@@ -30,7 +30,7 @@
 #include "unicode/brkiter.h"
 #include "unicode/udata.h"
 #include "unicode/parseerr.h"
-#include "unicode/schriter.h"
+#include "unicode/uchriter.h"
 #include "unicode/utext.h"
 
 struct UCPTrie;
@@ -125,18 +125,18 @@ private:
     uint32_t            fDictionaryCharCount = 0;
 
     /**
-     *   A character iterator that refers to the same text as the UText, above.
+     *   A character iterator that refers to the text being processed.
      *   Only included for compatibility with old API, which was based on CharacterIterators.
-     *   Value may be adopted from outside, or one of fSCharIter or fDCharIter, below.
+     *
      */
-    CharacterIterator  *fCharIter = nullptr;
+    CharacterIterator  *fCharIter = &fSCharIter;
 
     /**
      *   When the input text is provided by a UnicodeString, this will point to
      *    a characterIterator that wraps that data.  Needed only for the
      *    implementation of getText(), a backwards compatibility issue.
      */
-    StringCharacterIterator fSCharIter;
+    UCharCharacterIterator fSCharIter {u"", 0};
 
     /**
       * True when iteration has run off the end, and iterator functions should return UBRK_DONE.
@@ -144,9 +144,10 @@ private:
     UBool fDone = false;
 
     /**
-     * True if this break iterator was successfully initialized, with no memory allocation failures.
+     * True if this break iterator was successfully created,
+     * and has not been left in an inconsistent state due to memory allocation failures.
      */
-    bool fInitialized = false;
+    bool fValid = false;
 
     /**
      *  Array of look-ahead tentative results.
@@ -645,9 +646,10 @@ private:
 
     /**
       * Common initialization function, used by constructors and bufferClone.
+      * Return true if successful.
       * @internal (private)
       */
-    void init(UErrorCode &status);
+    bool init(UErrorCode &status);
 
     /**
      * Iterate backwards from an arbitrary position in the input text using the

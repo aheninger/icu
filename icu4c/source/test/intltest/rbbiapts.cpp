@@ -234,9 +234,10 @@ void RBBIAPITest::TestHashCode()
 
     logln((UnicodeString)"Testing hashCode()");
 
-    bi1->setText((UnicodeString)"Hash code");
-    bi2->setText((UnicodeString)"Hash code");
-    bi3->setText((UnicodeString)"Hash code");
+    UnicodeString str {u"Hash code"};
+    bi1->setText(str);
+    bi2->setText(str);
+    bi3->setText(str);
 
     RuleBasedBreakIterator* bi1clone= bi1->clone();
     RuleBasedBreakIterator* bi2clone= bi2->clone();

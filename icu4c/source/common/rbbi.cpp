@@ -44,11 +44,59 @@ U_NAMESPACE_BEGIN
 static bool gTrace = false;
 #endif
 
-// The state number of the starting state
-constexpr int32_t START_STATE = 1;
+static UStack *gLanguageBreakFactories = nullptr;
+static const UnicodeString *gEmptyString = nullptr;
+static UInitOnce gLanguageBreakFactoriesInitOnce = U_INITONCE_INITIALIZER;
+static UInitOnce gRBBIInitOnce = U_INITONCE_INITIALIZER;
 
-// The state-transition value indicating "stop"
-constexpr int32_t STOP_STATE = 0;
+
+/**
+ * Release all static memory held by breakiterator.
+ */
+UBool U_CALLCONV rbbi_cleanup(void) {
+    delete gLanguageBreakFactories;
+    gLanguageBreakFactories = nullptr;
+    delete gEmptyString;
+    gEmptyString = nullptr;
+    gLanguageBreakFactoriesInitOnce.reset();
+    gRBBIInitOnce.reset();
+    return TRUE;
+}
+
+
+static void U_CALLCONV _deleteFactory(void *obj) {
+    delete (LanguageBreakFactory *) obj;
+}
+
+static void U_CALLCONV rbbiInit(UErrorCode &status) {
+    gEmptyString = new UnicodeString();
+    if (gEmptyString == nullptr) { status = U_MEMORY_ALLOCATION_ERROR; }
+    ucln_common_registerCleanup(UCLN_COMMON_RBBI, rbbi_cleanup);
+#ifdef RBBI_DEBUG
+    char *debugEnv = getenv("U_RBBIDEBUG");
+    if (debugEnv && uprv_strstr(debugEnv, "trace")) {
+        gTrace = true;
+    }
+#endif
+}
+
+static void U_CALLCONV initLanguageFactories() {
+    UErrorCode status = U_ZERO_ERROR;
+    U_ASSERT(gLanguageBreakFactories == NULL);
+    gLanguageBreakFactories = new UStack(_deleteFactory, NULL, status);
+    if (gLanguageBreakFactories != NULL && U_SUCCESS(status)) {
+        ICULanguageBreakFactory *builtIn = new ICULanguageBreakFactory(status);
+        gLanguageBreakFactories->push(builtIn, status);
+#ifdef U_LOCAL_SERVICE_HOOK
+        LanguageBreakFactory *extra = (LanguageBreakFactory *)uprv_svc_hook("languageBreakFactory", &status);
+        if (extra != NULL) {
+            gLanguageBreakFactories->push(extra, status);
+        }
+#endif
+    }
+    ucln_common_registerCleanup(UCLN_COMMON_RBBI, rbbi_cleanup);
+}
+
 
 
 UOBJECT_DEFINE_RTTI_IMPLEMENTATION(RuleBasedBreakIterator)
@@ -58,34 +106,26 @@ UOBJECT_DEFINE_RTTI_IMPLEMENTATION(RuleBasedBreakIterator)
 // constructors
 //=======================================================================
 
-static const UnicodeString &emptyString() {
-    static const UnicodeString s;
-    return s;
-};
-
 /**
  * Constructs a RuleBasedBreakIterator that uses the already-created
  * tables object that is passed in as a parameter.
  */
-RuleBasedBreakIterator::RuleBasedBreakIterator(RBBIDataHeader* data, UErrorCode &status)
- : fSCharIter(emptyString())
-{
-    init(status);
-    fData = new RBBIDataWrapper(data, status); // status checked in constructor
-    if (U_FAILURE(status)) {return;}
-    if(fData == nullptr) {
-        status = U_MEMORY_ALLOCATION_ERROR;
+RuleBasedBreakIterator::RuleBasedBreakIterator(RBBIDataHeader* data, UErrorCode &status) {
+    if (!init(status)) {
         return;
     }
-    if (fData->fForwardTable->fLookAheadResultsSize > 0) {
+    fData = new RBBIDataWrapper(data, status); // status checked in constructor
+    if(fData == nullptr) {
+        status = U_MEMORY_ALLOCATION_ERROR;
+    }
+    if (U_SUCCESS(status) && fData->fForwardTable->fLookAheadResultsSize > 0) {
         fLookAheadMatches = static_cast<int32_t *>(
             uprv_malloc(fData->fForwardTable->fLookAheadResultsSize * sizeof(int32_t)));
         if (fLookAheadMatches == nullptr) {
             status = U_MEMORY_ALLOCATION_ERROR;
-            return;
         }
     }
-    fInitialized = true;
+    fValid = U_SUCCESS(status);
 }
 
 //
@@ -94,10 +134,8 @@ RuleBasedBreakIterator::RuleBasedBreakIterator(RBBIDataHeader* data, UErrorCode 
 //
 RuleBasedBreakIterator::RuleBasedBreakIterator(const uint8_t *compiledRules,
                        uint32_t       ruleLength,
-                       UErrorCode     &status)
- : fSCharIter(emptyString())
-{
-    if (U_FAILURE(status)) {
+                       UErrorCode     &status) {
+    if (!init(status)) {
         return;
     }
     const RBBIDataHeader *data = (const RBBIDataHeader *)compiledRules;
@@ -105,7 +143,6 @@ RuleBasedBreakIterator::RuleBasedBreakIterator(const uint8_t *compiledRules,
         status = U_ILLEGAL_ARGUMENT_ERROR;
         return;
     }
-    init(status);
 
     fData = new RBBIDataWrapper(data, RBBIDataWrapper::kDontAdopt, status);
     if(fData == nullptr) {
@@ -118,7 +155,7 @@ RuleBasedBreakIterator::RuleBasedBreakIterator(const uint8_t *compiledRules,
             status = U_MEMORY_ALLOCATION_ERROR;
         }
     }
-    fInitialized = U_SUCCESS(status);
+    fValid = U_SUCCESS(status);
 }
 
 
@@ -128,27 +165,25 @@ RuleBasedBreakIterator::RuleBasedBreakIterator(const uint8_t *compiledRules,
 //                 stored in an ICU data file.
 //
 //-------------------------------------------------------------------------------
-RuleBasedBreakIterator::RuleBasedBreakIterator(UDataMemory* udm, UErrorCode &status)
- : fSCharIter(emptyString())
-{
-    init(status);
-    fData = new RBBIDataWrapper(udm, status); // status checked in constructor
-    if (U_FAILURE(status)) {return;}
-    if(fData == nullptr) {
-        status = U_MEMORY_ALLOCATION_ERROR;
+RuleBasedBreakIterator::RuleBasedBreakIterator(UDataMemory* udm, UErrorCode &status) {
+    if (!init(status)) {
         return;
     }
-    if (fData->fForwardTable->fLookAheadResultsSize > 0) {
-        fLookAheadMatches = static_cast<int32_t *>(
-            uprv_malloc(fData->fForwardTable->fLookAheadResultsSize * sizeof(int32_t)));
-        if (fLookAheadMatches == nullptr) {
-            status = U_MEMORY_ALLOCATION_ERROR;
-            return;
+    fData = new RBBIDataWrapper(udm, status); // status checked in constructor
+    if(fData == nullptr) {
+        status = U_MEMORY_ALLOCATION_ERROR;
+    }
+    if (U_SUCCESS(status)) {
+        if (fData->fForwardTable->fLookAheadResultsSize > 0) {
+            fLookAheadMatches = static_cast<int32_t *>(
+                uprv_malloc(fData->fForwardTable->fLookAheadResultsSize * sizeof(int32_t)));
+            if (fLookAheadMatches == nullptr) {
+                status = U_MEMORY_ALLOCATION_ERROR;
+            }
         }
     }
-    fInitialized = U_SUCCESS(status);
+    fValid = U_SUCCESS(status);
 }
-
 
 
 //-------------------------------------------------------------------------------
@@ -158,12 +193,8 @@ RuleBasedBreakIterator::RuleBasedBreakIterator(UDataMemory* udm, UErrorCode &sta
 //-------------------------------------------------------------------------------
 RuleBasedBreakIterator::RuleBasedBreakIterator( const UnicodeString  &rules,
                                                 UParseError          &parseError,
-                                                UErrorCode           &status)
- : fSCharIter(emptyString())
-{
-    init(status);
-    if (U_FAILURE(status)) {
-
+                                                UErrorCode           &status) {
+    if (!init(status)) {
         return;
     }
     RuleBasedBreakIterator *bi = (RuleBasedBreakIterator *)
@@ -173,9 +204,9 @@ RuleBasedBreakIterator::RuleBasedBreakIterator( const UnicodeString  &rules,
     //        can't just return the object created by the builder factory, hence
     //        the assignment of the factory created object to "this".
     if (U_SUCCESS(status)) {
+        fValid = true;
         *this = *bi;
         delete bi;
-        fInitialized = true;
     }
 }
 
@@ -186,11 +217,10 @@ RuleBasedBreakIterator::RuleBasedBreakIterator( const UnicodeString  &rules,
 //                           Used when creating a RuleBasedBreakIterator from a set
 //                           of rules.
 //-------------------------------------------------------------------------------
-RuleBasedBreakIterator::RuleBasedBreakIterator()
- : fSCharIter(emptyString()) {
+RuleBasedBreakIterator::RuleBasedBreakIterator() {
     UErrorCode status = U_ZERO_ERROR;
     init(status);
-    fInitialized = true;
+    fValid = U_SUCCESS(status);
 }
 
 
@@ -201,13 +231,13 @@ RuleBasedBreakIterator::RuleBasedBreakIterator()
 //
 //-------------------------------------------------------------------------------
 RuleBasedBreakIterator::RuleBasedBreakIterator(const RuleBasedBreakIterator& other)
-: BreakIterator(other),
-  fSCharIter(emptyString())
+: BreakIterator(other)
 {
     UErrorCode status = U_ZERO_ERROR;
-    this->init(status);
-    *this = other;
-    fInitialized = true;  // TODO: ...
+    if (init(status)) {
+        fValid = true;
+        *this = other;
+    }
 }
 
 
@@ -241,6 +271,8 @@ RuleBasedBreakIterator::~RuleBasedBreakIterator() {
 
     uprv_free(fLookAheadMatches);
     fLookAheadMatches = nullptr;
+
+    fValid = false;
 }
 
 /**
@@ -253,37 +285,44 @@ RuleBasedBreakIterator::operator=(const RuleBasedBreakIterator& that) {
     if (this == &that) {
         return *this;
     }
+    if (!(fValid && that.fValid)) {
+        // Source and destination must both be valid. If not, mark
+        // dest as invalid and do nothing else.
+        fValid = false;
+        return *this;
+    }
+
     BreakIterator::operator=(that);
 
-    if (fLanguageBreakEngines != NULL) {
+    // Note: fLanguageBreakEngines will be automatically repopulated in the destination
+    // as it is needed. At this point, we need only clear any old contents.
+    if (fLanguageBreakEngines != nullptr) {
         delete fLanguageBreakEngines;
-        fLanguageBreakEngines = NULL;   // Just rebuild for now
+        fLanguageBreakEngines = nullptr;
     }
-    // TODO: clone fLanguageBreakEngines from "that"
+
     UErrorCode status = U_ZERO_ERROR;
     utext_clone(&fText, &that.fText, FALSE, TRUE, &status);
 
     if (fCharIter != &fSCharIter) {
         delete fCharIter;
     }
+    fSCharIter = that.fSCharIter;  // Note: whole object, not pointer, assignment.
     fCharIter = &fSCharIter;
 
-    if (that.fCharIter != NULL && that.fCharIter != &that.fSCharIter) {
-        // This is a little bit tricky - it will intially appear that
-        //  this->fCharIter is adopted, even if that->fCharIter was
-        //  not adopted.  That's ok.
+    if (that.fCharIter != nullptr && that.fCharIter != &that.fSCharIter) {
+        // The source break iterator (that) has an adopted fCharIter.
         fCharIter = that.fCharIter->clone();
-    }
-    fSCharIter = that.fSCharIter;
-    if (fCharIter == NULL) {
-        fCharIter = &fSCharIter;
+        if (fCharIter == nullptr) {
+            fValid = false;   // memory allocation failure.
+        }
     }
 
-    if (fData != NULL) {
+    if (fData != nullptr) {
         fData->removeReference();
-        fData = NULL;
+        fData = nullptr;
     }
-    if (that.fData != NULL) {
+    if (that.fData != nullptr) {
         fData = that.fData->addReference();
     }
 
@@ -292,6 +331,10 @@ RuleBasedBreakIterator::operator=(const RuleBasedBreakIterator& that) {
     if (fData && fData->fForwardTable->fLookAheadResultsSize > 0) {
         fLookAheadMatches = static_cast<int32_t *>(
             uprv_malloc(fData->fForwardTable->fLookAheadResultsSize * sizeof(int32_t)));
+        if (fLookAheadMatches == nullptr) {
+            fValid = false;
+            return *this;;
+        }
     }
 
 
@@ -299,12 +342,14 @@ RuleBasedBreakIterator::operator=(const RuleBasedBreakIterator& that) {
     fRuleStatusIndex = that.fRuleStatusIndex;
     fDone = that.fDone;
 
-    // TODO: both the dictionary and the main cache need to be copied.
-    //       Current position could be within a dictionary range. Trying to continue
-    //       the iteration without the caches present would go to the rules, with
-    //       the assumption that the current position is on a rule boundary.
-    fBreakCache->reset(fPosition, fRuleStatusIndex);
+    // Clear the boundary caches in the destination. They will refill as needed
+    // as the iterator is used.
+    fBreakCache->reset();
     fDictionaryCache->reset();
+
+    // Set the destination iterator current position by calling isBoundary(),
+    // which does this as a side-effect.
+    isBoundary(that.fPosition);
 
     return *this;
 }
@@ -314,27 +359,20 @@ RuleBasedBreakIterator::operator=(const RuleBasedBreakIterator& that) {
 //-----------------------------------------------------------------------------
 //
 //    init()      Shared initialization routine.   Used by all the constructors.
-//                Initializes all fields, leaving the object in a consistent state.
 //
 //-----------------------------------------------------------------------------
-void RuleBasedBreakIterator::init(UErrorCode &status) {
+bool RuleBasedBreakIterator::init(UErrorCode &status) {
+    umtx_initOnce(gRBBIInitOnce, rbbiInit, status);
+    if (U_FAILURE(status)) {
+        return false;
+    }
     utext_openUChars(&fText, nullptr, 0, &status);
     fDictionaryCache = new DictionaryCache(this, status);
     fBreakCache      = new BreakCache(this, status);
     if (fDictionaryCache == nullptr || fBreakCache == nullptr) {
         status = U_MEMORY_ALLOCATION_ERROR;
     }
-
-#ifdef RBBI_DEBUG
-    static bool debugInitDone = false;
-    if (debugInitDone == false) {
-        char *debugEnv = getenv("U_RBBIDEBUG");
-        if (debugEnv && uprv_strstr(debugEnv, "trace")) {
-            gTrace = true;
-        }
-        debugInitDone = true;
-    }
-#endif
+    return U_SUCCESS(status);
 }
 
 
@@ -348,7 +386,12 @@ void RuleBasedBreakIterator::init(UErrorCode &status) {
 //-----------------------------------------------------------------------------
 RuleBasedBreakIterator*
 RuleBasedBreakIterator::clone() const {
-    return new RuleBasedBreakIterator(*this);
+    RuleBasedBreakIterator *result = new RuleBasedBreakIterator(*this);
+    if (result && !result->fValid) {
+        delete result;
+        result = nullptr;
+    }
+    return result;
 }
 
 /**
@@ -358,10 +401,10 @@ RuleBasedBreakIterator::clone() const {
 UBool
 RuleBasedBreakIterator::operator==(const BreakIterator& that) const {
     if (typeid(*this) != typeid(that)) {
-        return FALSE;
+        return false;
     }
     if (this == &that) {
-        return TRUE;
+        return true;
     }
 
     // The base class BreakIterator carries no state that participates in equality,
@@ -370,6 +413,9 @@ RuleBasedBreakIterator::operator==(const BreakIterator& that) const {
 
     const RuleBasedBreakIterator& that2 = (const RuleBasedBreakIterator&) that;
 
+    if (!fValid || !that2.fValid) {
+        return false;
+    }
     if (!utext_equals(&fText, &that2.fText)) {
         // The two break iterators are operating on different text,
         //   or have a different iteration position.
@@ -409,7 +455,7 @@ void RuleBasedBreakIterator::setText(UText *ut, UErrorCode &status) {
     if (U_FAILURE(status)) {
         return;
     }
-    if (!fInitialized) {
+    if (!fValid) {
         status = U_MEMORY_ALLOCATION_ERROR;
         return;
     }
@@ -424,7 +470,7 @@ void RuleBasedBreakIterator::setText(UText *ut, UErrorCode &status) {
     //   Return one over an empty string instead - this is the closest
     //   we can come to signaling a failure.
     //   (GetText() is obsolete, this failure is sort of OK)
-    fSCharIter.setText(UnicodeString());
+    fSCharIter.setText(u"", 0);
 
     if (fCharIter != &fSCharIter) {
         // existing fCharIter was adopted from the outside.  Delete it now.
@@ -437,7 +483,7 @@ void RuleBasedBreakIterator::setText(UText *ut, UErrorCode &status) {
 
 
 UText *RuleBasedBreakIterator::getUText(UText *fillIn, UErrorCode &status) const {
-    if (!fInitialized) {
+    if (!fValid) {
         status = U_MEMORY_ALLOCATION_ERROR;
     }
     UText *result = utext_clone(fillIn, &fText, FALSE, TRUE, &status);
@@ -472,7 +518,7 @@ RuleBasedBreakIterator::adoptText(CharacterIterator* newText) {
 
     fCharIter = newText;
     UErrorCode status = U_ZERO_ERROR;
-    if (newText==nullptr || newText->startIndex() != 0 || !fInitialized) {
+    if (newText==nullptr || newText->startIndex() != 0 || !fValid) {
         // startIndex !=0 wants to be an error, but there's no way to report it.
         // For this or other error conditions, make the iterator text be an empty string.
         utext_openUChars(&fText, nullptr, 0, &status);
@@ -492,7 +538,7 @@ RuleBasedBreakIterator::adoptText(CharacterIterator* newText) {
  */
 void
 RuleBasedBreakIterator::setText(const UnicodeString& newText) {
-    if (!fInitialized) {
+    if (!fValid) {
         return;
     }
     UErrorCode status = U_ZERO_ERROR;
@@ -500,11 +546,12 @@ RuleBasedBreakIterator::setText(const UnicodeString& newText) {
     fDictionaryCache->reset();
     utext_openConstUnicodeString(&fText, &newText, &status);
 
-    // Set up a character iterator on the string.
-    //   Needed in case someone calls getText().
-    //  Can not, unfortunately, do this lazily on the (probably never)
-    //  call to getText(), because getText is const.
-    fSCharIter.setText(newText);
+    //     Set up a character iterator on the string. Needed for
+    //     getText(), which returns a CharacterIterator. Not creating it lazily
+    //     in getText() because that function is const, so must be thread safe,
+    //     which would make the lazy creation overly complex.
+    //
+    fSCharIter.setText(newText.getBuffer(), newText.length());
 
     if (fCharIter != &fSCharIter) {
         // old fCharIter was adopted from the outside.  Delete it.
@@ -526,7 +573,7 @@ RuleBasedBreakIterator &RuleBasedBreakIterator::refreshInputText(UText *input, U
     if (U_FAILURE(status)) {
         return *this;
     }
-    if (!fInitialized) {
+    if (!fValid) {
         status = U_MEMORY_ALLOCATION_ERROR;
         return *this;
     }
@@ -557,7 +604,7 @@ RuleBasedBreakIterator &RuleBasedBreakIterator::refreshInputText(UText *input, U
  * @return The new iterator position, which is zero.
  */
 int32_t RuleBasedBreakIterator::first(void) {
-    if (!fInitialized) {
+    if (!fValid) {
         return 0;
     }
     UErrorCode status = U_ZERO_ERROR;
@@ -574,7 +621,7 @@ int32_t RuleBasedBreakIterator::first(void) {
  * @return The text's past-the-end offset.
  */
 int32_t RuleBasedBreakIterator::last(void) {
-    if (!fInitialized) {
+    if (!fValid) {
         return UBRK_DONE;
     }
     int32_t endPos = (int32_t)utext_nativeLength(&fText);
@@ -615,7 +662,7 @@ int32_t RuleBasedBreakIterator::next(int32_t n) {
  * @return The position of the first boundary after this one.
  */
 int32_t RuleBasedBreakIterator::next(void) {
-    if (!fInitialized) {
+    if (!fValid) {
         return UBRK_DONE;
     }
     fBreakCache->next();
@@ -631,7 +678,7 @@ int32_t RuleBasedBreakIterator::next(void) {
  * @return The position of the boundary position immediately preceding the starting position.
  */
 int32_t RuleBasedBreakIterator::previous(void) {
-    if (fInitialized) {
+    if (!fValid) {
         return UBRK_DONE;
     }
     UErrorCode status = U_ZERO_ERROR;
@@ -646,6 +693,9 @@ int32_t RuleBasedBreakIterator::previous(void) {
  * @return The position of the first break after the current position.
  */
 int32_t RuleBasedBreakIterator::following(int32_t startPos) {
+    if (!fValid) {
+        return UBRK_DONE;
+    }
     // if the supplied position is before the beginning, return the
     // text's starting offset
     if (startPos < 0) {
@@ -669,7 +719,7 @@ int32_t RuleBasedBreakIterator::following(int32_t startPos) {
  * @return The position of the last boundary before the starting position.
  */
 int32_t RuleBasedBreakIterator::preceding(int32_t offset) {
-    if (!fInitialized) {
+    if (!fValid) {
         return UBRK_DONE;
     }
     if (offset > utext_nativeLength(&fText)) {
@@ -696,7 +746,7 @@ int32_t RuleBasedBreakIterator::preceding(int32_t offset) {
  * @return True if "offset" is a boundary position.
  */
 UBool RuleBasedBreakIterator::isBoundary(int32_t offset) {
-    if (!fInitialized) {
+    if (!fValid) {
         return false;
     }
     // out-of-range indexes are never boundary positions
@@ -805,6 +855,12 @@ int32_t RuleBasedBreakIterator::handleSafePrevious(int32_t fromPosition) {
     }
 }
 
+
+// The state number of the starting state
+constexpr int32_t START_STATE = 1;
+
+// The state-transition value indicating "stop"
+constexpr int32_t STOP_STATE = 0;
 
 //-----------------------------------------------------------------------------------
 //
@@ -1154,57 +1210,7 @@ RuleBasedBreakIterator *RuleBasedBreakIterator::createBufferClone(
     return (RuleBasedBreakIterator *)clonedBI;
 }
 
-U_NAMESPACE_END
 
-
-static icu::UStack *gLanguageBreakFactories = nullptr;
-static const icu::UnicodeString *gEmptyString = nullptr;
-static icu::UInitOnce gLanguageBreakFactoriesInitOnce = U_INITONCE_INITIALIZER;
-static icu::UInitOnce gRBBIInitOnce = U_INITONCE_INITIALIZER;
-
-/**
- * Release all static memory held by breakiterator.
- */
-U_CDECL_BEGIN
-UBool U_CALLCONV rbbi_cleanup(void) {
-    delete gLanguageBreakFactories;
-    gLanguageBreakFactories = nullptr;
-    delete gEmptyString;
-    gEmptyString = nullptr;
-    gLanguageBreakFactoriesInitOnce.reset();
-    gRBBIInitOnce.reset();
-    return TRUE;
-}
-U_CDECL_END
-
-U_CDECL_BEGIN
-static void U_CALLCONV _deleteFactory(void *obj) {
-    delete (icu::LanguageBreakFactory *) obj;
-}
-U_CDECL_END
-U_NAMESPACE_BEGIN
-
-static void U_CALLCONV rbbiInit() {
-    gEmptyString = new UnicodeString();
-    ucln_common_registerCleanup(UCLN_COMMON_RBBI, rbbi_cleanup);
-}
-
-static void U_CALLCONV initLanguageFactories() {
-    UErrorCode status = U_ZERO_ERROR;
-    U_ASSERT(gLanguageBreakFactories == NULL);
-    gLanguageBreakFactories = new UStack(_deleteFactory, NULL, status);
-    if (gLanguageBreakFactories != NULL && U_SUCCESS(status)) {
-        ICULanguageBreakFactory *builtIn = new ICULanguageBreakFactory(status);
-        gLanguageBreakFactories->push(builtIn, status);
-#ifdef U_LOCAL_SERVICE_HOOK
-        LanguageBreakFactory *extra = (LanguageBreakFactory *)uprv_svc_hook("languageBreakFactory", &status);
-        if (extra != NULL) {
-            gLanguageBreakFactories->push(extra, status);
-        }
-#endif
-    }
-    ucln_common_registerCleanup(UCLN_COMMON_RBBI, rbbi_cleanup);
-}
 
 
 static const LanguageBreakEngine*
@@ -1308,10 +1314,13 @@ void RuleBasedBreakIterator::dumpTables() {
 
 const UnicodeString&
 RuleBasedBreakIterator::getRules() const {
-    if (fData != NULL) {
+    if (fValid && fData != nullptr) {
         return fData->getRuleSourceString();
     } else {
-        umtx_initOnce(gRBBIInitOnce, &rbbiInit);
+        // Note: there is a chance that gEmptyString could be null, if rbbiInit()
+        // encountered a memory allocation failure, but there is no practical way
+        // to avoid the problem. And the factory or constructor that created the
+        // break iterator should have returned an error code.
         return *gEmptyString;
     }
 }
