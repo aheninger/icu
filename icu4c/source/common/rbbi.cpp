@@ -1308,6 +1308,12 @@ void RuleBasedBreakIterator::dumpTables() {
     fData->printData();
 }
 
+void RuleBasedBreakIterator::makeInvalid() {
+    delete fBreakCache;
+    fBreakCache = nullptr;
+    fValid = false;
+}
+
 /**
  * Returns the description used to create this iterator
  */

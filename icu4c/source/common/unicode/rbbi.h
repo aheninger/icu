@@ -720,6 +720,13 @@ private:
      * @internal
      */
     void dumpTables();
+
+    /**
+     * Force the BreakIterator into an invalid state, as if a memory allocation error
+     * had occured during construction. This function is for testing purposes only.
+     * @internal
+     */
+    void makeInvalid();
 #endif  /* U_HIDE_INTERNAL_API */
 };
 
