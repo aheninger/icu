@@ -329,7 +329,10 @@ int32_t UVector::indexOf(UElement key, int32_t startIndex, int8_t hint) const {
 }
 
 UBool UVector::ensureCapacity(int32_t minimumCapacity, UErrorCode &status) {
-	if (minimumCapacity < 0) {
+    if (U_FAILURE(status)) {
+        return FALSE;
+    }
+    if (minimumCapacity < 0) {
         status = U_ILLEGAL_ARGUMENT_ERROR;
         return FALSE;
 	}

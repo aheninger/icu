@@ -134,6 +134,7 @@ void RBBITest::runIndexedTest( int32_t index, UBool exec, const char* &name, cha
     TESTCASE_AUTO(Test16BitsTrieWith16BitStateTable);
     TESTCASE_AUTO(TestTable_8_16_Bits);
     TESTCASE_AUTO(TestBug13590);
+    TESTCASE_AUTO(TestInvalidItr);
 
 #if U_ENABLE_TRACING
     TESTCASE_AUTO(TestTraceCreateCharacter);
@@ -5142,6 +5143,90 @@ void RBBITest::TestBug13590() {
     // Two matches are expected, one from the last rule that was explicitly modified,
     // and one at the end of the text.
     assertEquals(WHERE, 2, breaksFound);
+}
+
+// Test the entire RuleBasedBreakIterator public API on an invalid iterator.
+//
+// An Invalid iterator is what you get if a memory allocation error occurs
+// internally to the RBBI implementation, leaving an iterator in a state where
+// it cannot safely function.
+//
+// The expected results are a) no crashes, and b) minimal, benign function behavior.
+// The functions are checked in the order they appear in the rbbi.h header file.
+//
+void RBBITest::TestInvalidItr() {
+    UErrorCode status = U_ZERO_ERROR;
+    std::unique_ptr<RuleBasedBreakIterator>bi_invalid(static_cast<RuleBasedBreakIterator *>
+            (BreakIterator::createCharacterInstance(Locale::getEnglish(), status)));
+    bi_invalid->makeInvalid();
+    std::unique_ptr<RuleBasedBreakIterator>bi_valid(static_cast<RuleBasedBreakIterator *>
+            (BreakIterator::createCharacterInstance(Locale::getEnglish(), status)));
+    if (!assertSuccess(WHERE, status)) {
+        return;
+    }
+    UnicodeString text(u"Hello, World.");
+    bi_valid->setText(text);
+
+    RuleBasedBreakIterator copy(*bi_invalid);
+    assertEquals(WHERE, UBRK_DONE, copy.first());   // copy of invalid bi is also invalid.
+
+    RuleBasedBreakIterator assign;
+    assign = *bi_invalid;
+    assertFalse(WHERE, *bi_invalid == *bi_valid);
+    assertTrue(WHERE, *bi_invalid != *bi_valid);
+
+    assertTrue(WHERE, nullptr == bi_invalid->clone());
+    assertFalse(WHERE, 0 == bi_invalid->hashCode());
+    assertEquals(WHERE, UnicodeString(u""), bi_invalid->getRules());
+    assertFalse(WHERE, bi_valid->getText() == bi_invalid->getText());
+
+    status = U_ZERO_ERROR;
+    assertTrue(WHERE, nullptr == bi_invalid->getUText(nullptr, status));
+    assertEquals(WHERE, U_MEMORY_ALLOCATION_ERROR, status);
+
+    // RuleBasedBreakIterator::adoptText() must delete any adopted text, even when
+    // the break iterator itself is in an invalid state.
+    CharacterIterator *ci = new UCharCharacterIterator(u"Hello, World.", -1);
+    bi_invalid->adoptText(ci);
+
+    bi_invalid->setText(text);
+
+    status = U_ZERO_ERROR;
+    UText ut = UTEXT_INITIALIZER;
+    utext_openUChars(&ut, u"Hello, world.", -1, &status);
+    assertSuccess(WHERE, status);
+    bi_invalid->setText(&ut, status);
+    assertEquals(WHERE, U_MEMORY_ALLOCATION_ERROR, status);
+
+    assertEquals(WHERE, UBRK_DONE, bi_invalid->first());
+    assertEquals(WHERE, UBRK_DONE, bi_invalid->last());
+    assertEquals(WHERE, UBRK_DONE, bi_invalid->next(2));
+    assertEquals(WHERE, UBRK_DONE, bi_invalid->next());
+    assertEquals(WHERE, UBRK_DONE, bi_invalid->previous());
+    assertEquals(WHERE, UBRK_DONE, bi_invalid->following(0));
+    assertEquals(WHERE, UBRK_DONE, bi_invalid->preceding(1));
+    assertTrue(WHERE, bi_invalid->isBoundary(0));
+    assertEquals(WHERE, 0, bi_invalid->current());
+    assertEquals(WHERE, 0, bi_invalid->getRuleStatus());
+
+    status = U_ZERO_ERROR;
+    int statusVec[] = {42, 0, 0};
+    assertEquals(WHERE, 0, bi_invalid->getRuleStatusVec(statusVec, UPRV_LENGTHOF(statusVec), status));
+    assertEquals(WHERE, 42, statusVec[0]);
+
+    status = U_ZERO_ERROR;
+    char stackBuffer[100];
+    int32_t bufferSize = (int32_t)sizeof(stackBuffer);
+    assertTrue(WHERE, nullptr == bi_invalid->createBufferClone(stackBuffer, bufferSize, status));
+    assertEquals(WHERE, U_MEMORY_ALLOCATION_ERROR, status);
+
+    uint32_t ruleLength = 13;
+    assertTrue(WHERE, nullptr == bi_invalid->getBinaryRules(ruleLength));
+    assertEquals(WHERE, 0, ruleLength);
+
+    status = U_ZERO_ERROR;
+    assertTrue(WHERE, bi_invalid.get() == &bi_invalid->refreshInputText(nullptr, status));
+    assertEquals(WHERE, U_MEMORY_ALLOCATION_ERROR, status);
 }
 
 

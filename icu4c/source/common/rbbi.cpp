@@ -80,21 +80,24 @@ static void U_CALLCONV rbbiInit(UErrorCode &status) {
 #endif
 }
 
-static void U_CALLCONV initLanguageFactories() {
-    UErrorCode status = U_ZERO_ERROR;
-    U_ASSERT(gLanguageBreakFactories == NULL);
-    gLanguageBreakFactories = new UStack(_deleteFactory, NULL, status);
-    if (gLanguageBreakFactories != NULL && U_SUCCESS(status)) {
-        ICULanguageBreakFactory *builtIn = new ICULanguageBreakFactory(status);
-        gLanguageBreakFactories->push(builtIn, status);
-#ifdef U_LOCAL_SERVICE_HOOK
-        LanguageBreakFactory *extra = (LanguageBreakFactory *)uprv_svc_hook("languageBreakFactory", &status);
-        if (extra != NULL) {
-            gLanguageBreakFactories->push(extra, status);
-        }
-#endif
-    }
+static void U_CALLCONV initLanguageFactories(UErrorCode &status) {
+    U_ASSERT(gLanguageBreakFactories == nullptr);
     ucln_common_registerCleanup(UCLN_COMMON_RBBI, rbbi_cleanup);
+
+    LocalPointer<UStack> lbFactories(new UStack(_deleteFactory, nullptr, status), status);
+    LocalPointer<ICULanguageBreakFactory> builtIn(new ICULanguageBreakFactory(status), status);
+    LocalPointer<LanguageBreakFactory> extra;
+#ifdef U_LOCAL_SERVICE_HOOK
+    extra.adoptInstead((LanguageBreakFactory *)uprv_svc_hook("languageBreakFactory", &status));
+#endif
+    if (U_FAILURE(status)) {
+        return;
+    }
+    gLanguageBreakFactories = lbFactories.orphan();
+    gLanguageBreakFactories->push(builtIn.orphan(), status);
+    if (extra.isValid()) {
+        gLanguageBreakFactories->push(extra.orphan(), status);
+    }
 }
 
 
@@ -605,7 +608,7 @@ RuleBasedBreakIterator &RuleBasedBreakIterator::refreshInputText(UText *input, U
  */
 int32_t RuleBasedBreakIterator::first(void) {
     if (!fValid) {
-        return 0;
+        return UBRK_DONE;
     }
     UErrorCode status = U_ZERO_ERROR;
     if (!fBreakCache->seek(0)) {
@@ -747,7 +750,7 @@ int32_t RuleBasedBreakIterator::preceding(int32_t offset) {
  */
 UBool RuleBasedBreakIterator::isBoundary(int32_t offset) {
     if (!fValid) {
-        return false;
+        return true;  // Prefer true when invalid because callers may loop looking for a boundary.
     }
     // out-of-range indexes are never boundary positions
     if (offset < 0) {
@@ -1155,6 +1158,10 @@ int32_t RuleBasedBreakIterator::getRuleStatusVec(
     if (U_FAILURE(status)) {
         return 0;
     }
+    if (!fValid) {
+        status = U_MEMORY_ALLOCATION_ERROR;
+        return 0;
+    }
 
     int32_t  numVals = fData->fRuleStatusTable[fRuleStatusIndex];
     int32_t  numValsToCopy = numVals;
@@ -1182,7 +1189,7 @@ const uint8_t  *RuleBasedBreakIterator::getBinaryRules(uint32_t &length) {
     const uint8_t  *retPtr = NULL;
     length = 0;
 
-    if (fData != NULL) {
+    if (fValid && fData != nullptr) {
         retPtr = (const uint8_t *)fData->fHeader;
         length = fData->fHeader->fLength;
     }
@@ -1216,7 +1223,8 @@ RuleBasedBreakIterator *RuleBasedBreakIterator::createBufferClone(
 static const LanguageBreakEngine*
 getLanguageBreakEngineFromFactory(UChar32 c)
 {
-    umtx_initOnce(gLanguageBreakFactoriesInitOnce, &initLanguageFactories);
+    UErrorCode status = U_ZERO_ERROR;  // TODO: propagate error out.
+    umtx_initOnce(gLanguageBreakFactoriesInitOnce, &initLanguageFactories, status);
     if (gLanguageBreakFactories == NULL) {
         return NULL;
     }
