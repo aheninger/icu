@@ -38,17 +38,6 @@ U_NAMESPACE_BEGIN
  * indices are out of bounds, either nothing happens, or zero is
  * returned.  We <em>do</em> avoid indexing off into the weeds.
  *
- * <p>There is detection of out of memory, but the handling is very
- * coarse-grained -- similar to UnicodeString's protocol, but even
- * coarser.  The class contains <em>one static flag</em> that is set
- * when any call to <tt>new</tt> returns zero.  This allows the caller
- * to use several vectors and make just one check at the end to see if
- * a memory failure occurred.  This is more efficient than making a
- * check after each call on each vector when doing many operations on
- * multiple vectors.  The single static flag works best when memory
- * failures are infrequent, and when recovery options are limited or
- * nonexistent.
- *
  * <p>Since we don't have garbage collection, UVector was given the
  * option to <em>own</em>its contents.  To employ this, set a deleter
  * function.  The deleter is called on a void* pointer when that
@@ -172,7 +161,19 @@ public:
 
     inline UBool isEmpty(void) const;
 
-    UBool ensureCapacity(int32_t minimumCapacity, UErrorCode &status);
+    /**
+     * Combination of ensuring a minimum capacity and error handling.
+     *
+     * If the requested minimum capacity is not attainable,
+     * or if there is an incoming error code,
+     * and the UVector has an element deleter function, then
+     * delete the incoming element that would otherwise have been added to & adopted
+     * by the UVector.
+     *
+     * Return true if the requested minimum capacity was avaialble.
+     * In the case of failure, return false and set the error code appropriately.
+     */
+    UBool ensureCapacity(int32_t minimumCapacity, void *el, UErrorCode &status);
 
     /**
      * Change the size of this vector as follows: If newSize is

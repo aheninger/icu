@@ -31,44 +31,17 @@ UVectorTest::~UVectorTest()
 }
 
 
-
-void UVectorTest::runIndexedTest( int32_t index, UBool exec, const char* &name, char* /*par*/ )
+void UVectorTest::runIndexedTest(int32_t index, UBool exec, const char* &name, char* par)
 {
-    if (exec) logln("TestSuite UVectorTest: ");
-    switch (index) {
-
-        case 0: name = "UVector_API";
-            if (exec) UVector_API();
-            break;
-        case 1: name = "UStack_API";
-            if (exec) UStack_API();
-            break;
-        case 2: name = "Hashtable_API";
-            if (exec) Hashtable_API();
-            break;
-        default: name = "";
-            break; //needed to end loop
-    }
+    (void)par;
+    TESTCASE_AUTO_BEGIN;
+    TESTCASE_AUTO(UVector_API);
+    TESTCASE_AUTO(UStack_API);
+    TESTCASE_AUTO(Hashtable_API);
+    TESTCASE_AUTO(UVector_ErrorHandling);
+    TESTCASE_AUTO_END;
 }
 
-
-//---------------------------------------------------------------------------
-//
-//   Error Checking / Reporting macros used in all of the tests.
-//
-//---------------------------------------------------------------------------
-#define TEST_CHECK_STATUS(status) UPRV_BLOCK_MACRO_BEGIN {\
-    if (U_FAILURE(status)) {\
-        errln("UVectorTest failure at line %d.  status=%s\n", __LINE__, u_errorName(status));\
-        return;\
-    }\
-} UPRV_BLOCK_MACRO_END
-
-#define TEST_ASSERT(expr) UPRV_BLOCK_MACRO_BEGIN {\
-    if ((expr)==FALSE) {\
-        errln("UVectorTest failure at line %d.\n", __LINE__);\
-    }\
-} UPRV_BLOCK_MACRO_END
 
 static int8_t U_CALLCONV
 UVectorTest_compareInt32(UElement key1, UElement key2) {
@@ -99,12 +72,12 @@ void UVectorTest::UVector_API() {
     UVector     *a;
 
     a = new UVector(status);
-    TEST_CHECK_STATUS(status);
+    assertSuccess(WHERE, status);
     delete a;
 
     status = U_ZERO_ERROR;
     a = new UVector(2000, status);
-    TEST_CHECK_STATUS(status);
+    assertSuccess(WHERE, status);
     delete a;
 
     status = U_ZERO_ERROR;
@@ -113,16 +86,16 @@ void UVectorTest::UVector_API() {
     a->sortedInsert((int32_t)20, UVectorTest_compareInt32, status);
     a->sortedInsert((int32_t)30, UVectorTest_compareInt32, status);
     a->sortedInsert((int32_t)15, UVectorTest_compareInt32, status);
-    TEST_CHECK_STATUS(status);
-    TEST_ASSERT(a->elementAti(0) == 10);
-    TEST_ASSERT(a->elementAti(1) == 15);
-    TEST_ASSERT(a->elementAti(2) == 20);
-    TEST_ASSERT(a->elementAti(3) == 30);
-    TEST_ASSERT(a->indexOf((int32_t)3) == -1);
-    TEST_ASSERT(a->indexOf((int32_t)15) == 1);
-    TEST_ASSERT(a->indexOf((int32_t)15, 2) == -1);
-    TEST_ASSERT(a->contains((int32_t)15));
-    TEST_ASSERT(!a->contains((int32_t)5));
+    assertSuccess(WHERE, status);
+    assertEquals(WHERE, 10, a->elementAti(0));
+    assertEquals(WHERE, 15, a->elementAti(1));
+    assertEquals(WHERE, 20, a->elementAti(2));
+    assertEquals(WHERE, 30, a->elementAti(3));
+    assertEquals(WHERE, -1, a->indexOf(3));
+    assertEquals(WHERE,  1, a->indexOf(15));
+    assertEquals(WHERE, -1, a->indexOf(15, 2));
+    assertTrue(WHERE, a->contains(15));
+    assertFalse(WHERE, a->contains(5));
     delete a;
 }
 
@@ -131,36 +104,36 @@ void UVectorTest::UStack_API() {
     UStack     *a;
 
     a = new UStack(status);
-    TEST_CHECK_STATUS(status);
+    assertSuccess(WHERE, status);
     delete a;
 
     status = U_ZERO_ERROR;
     a = new UStack(2000, status);
-    TEST_CHECK_STATUS(status);
+    assertSuccess(WHERE, status);
     delete a;
 
     status = U_ZERO_ERROR;
-    a = new UStack(NULL, NULL, 2000, status);
-    TEST_CHECK_STATUS(status);
+    a = new UStack(nullptr, nullptr, 2000, status);
+    assertSuccess(WHERE, status);
     delete a;
 
     status = U_ZERO_ERROR;
-    a = new UStack(NULL, UVectorTest_compareCstrings, status);
-    TEST_ASSERT(a->empty());
+    a = new UStack(nullptr, UVectorTest_compareCstrings, status);
+    assertTrue(WHERE, a->empty());
     a->push((void*)"abc", status);
-    TEST_ASSERT(!a->empty());
+    assertFalse(WHERE, a->empty());
     a->push((void*)"bcde", status);
     a->push((void*)"cde", status);
-    TEST_CHECK_STATUS(status);
-    TEST_ASSERT(strcmp("cde", (const char *)a->peek()) == 0);
-    TEST_ASSERT(a->search((void*)"cde") == 1);
-    TEST_ASSERT(a->search((void*)"bcde") == 2);
-    TEST_ASSERT(a->search((void*)"abc") == 3);
-    TEST_ASSERT(strcmp("abc", (const char *)a->firstElement()) == 0);
-    TEST_ASSERT(strcmp("cde", (const char *)a->lastElement()) == 0);
-    TEST_ASSERT(strcmp("cde", (const char *)a->pop()) == 0);
-    TEST_ASSERT(strcmp("bcde", (const char *)a->pop()) == 0);
-    TEST_ASSERT(strcmp("abc", (const char *)a->pop()) == 0);
+    assertSuccess(WHERE, status);
+    assertEquals(WHERE, "cde", (const char *)a->peek());
+    assertEquals(WHERE, 1, a->search((void*)"cde"));
+    assertEquals(WHERE, 2, a->search((void*)"bcde"));
+    assertEquals(WHERE, 3, a->search((void*)"abc"));
+    assertEquals(WHERE, "abc", (const char *)a->firstElement());
+    assertEquals(WHERE, "cde", (const char *)a->lastElement());
+    assertEquals(WHERE, "cde", (const char *)a->pop());
+    assertEquals(WHERE, "bcde", (const char *)a->pop());
+    assertEquals(WHERE, "abc", (const char *)a->pop());
     delete a;
 }
 
@@ -174,31 +147,70 @@ U_CDECL_END
 void UVectorTest::Hashtable_API() {
     UErrorCode status = U_ZERO_ERROR;
     Hashtable *a = new Hashtable(status);
-    TEST_ASSERT((a->puti("a", 1, status) == 0));
-    TEST_ASSERT((a->find("a") != NULL));
-    TEST_ASSERT((a->find("b") == NULL));
-    TEST_ASSERT((a->puti("b", 2, status) == 0));
-    TEST_ASSERT((a->find("b") != NULL));
-    TEST_ASSERT((a->removei("a") == 1));
-    TEST_ASSERT((a->find("a") == NULL));
+    assertEquals(WHERE, 0, a->puti(u"a", 1, status));
+    assertTrue(WHERE, a->find(u"a") != nullptr);
+    assertTrue(WHERE, a->find(u"b") == nullptr);
+    assertEquals(WHERE, 0, a->puti(u"b", 2, status));
+    assertTrue(WHERE, a->find(u"b") != nullptr);
+    assertEquals(WHERE, 1, a->removei(u"a"));
+    assertTrue(WHERE, a->find(u"a") == nullptr);
 
     /* verify that setValueComparator works */
     Hashtable b(status);
-    TEST_ASSERT((!a->equals(b)));
-    TEST_ASSERT((b.puti("b", 2, status) == 0));
-    TEST_ASSERT((!a->equals(b))); // Without a value comparator, this will be FALSE by default.
+    assertFalse(WHERE, a->equals(b));
+    assertEquals(WHERE, 0, b.puti("b", 2, status));
+    assertFalse(WHERE, a->equals(b)); // Without a value comparator, this will be FALSE by default.
     b.setValueComparator(uhash_compareLong);
-    TEST_ASSERT((!a->equals(b)));
+    assertFalse(WHERE, a->equals(b));
     a->setValueComparator(uhash_compareLong);
-    TEST_ASSERT((a->equals(b)));
-    TEST_ASSERT((a->equals(*a))); // This better be reflexive.
+    assertTrue(WHERE, a->equals(b));
+    assertTrue(WHERE, a->equals(*a)); // This better be reflexive.
 
     /* verify that setKeyComparator works */
-    TEST_ASSERT((a->puti("a", 1, status) == 0));
-    TEST_ASSERT((a->find("a") != NULL));
+    assertEquals(WHERE, 0, a->puti(u"a", 1, status));
+    assertTrue(WHERE, a->find(u"a") != nullptr);
     a->setKeyComparator(neverTRUE);
-    TEST_ASSERT((a->find("a") == NULL));
+    assertTrue(WHERE, a->find(u"a") == nullptr);
 
     delete a;
 }
 
+/*
+ * UVector_ErrorHandling. Issue ICU-21315
+ * Functions with an incoming UErrorCode error should take no action.
+ */
+void UVectorTest::UVector_ErrorHandling() {
+    {
+        UErrorCode status = U_ZERO_ERROR;
+        UVector v(status);
+        assertSuccess(WHERE, status);
+
+        UnicodeString s = u"Hello, World.";
+        v.addElement(&s, status);
+        assertSuccess(WHERE, status);
+        assertEquals(WHERE, 1, v.size());
+
+        status = U_INVALID_FORMAT_ERROR;   // Arbitrary incoming error.
+        v.addElement(&s, status);
+        assertEquals(WHERE, U_INVALID_FORMAT_ERROR, status);  // error unchanged.
+        assertEquals(WHERE, 1, v.size());    // addElement did not add.
+    }
+
+    {
+        // For UVectors with  a deleter function, adding an element adopts
+        // the object being added. In case of error, the incoming object
+        // is immediately deleted, otherwise it would leak.
+        UErrorCode status = U_ZERO_ERROR;
+        UVector v(uprv_deleteUObject, nullptr, status);
+        assertSuccess(WHERE, status);
+        v.addElement(new UnicodeString(u"Hello, World."), status);
+        assertSuccess(WHERE, status);
+        assertEquals(WHERE, 1, v.size());
+
+        status = U_INVALID_FORMAT_ERROR;
+        v.addElement(new UnicodeString(u"Hello, World."), status);
+        assertEquals(WHERE, U_INVALID_FORMAT_ERROR, status);  // error unchanged.
+        assertEquals(WHERE, 1, v.size());    // addElement did not add.
+
+    }
+}

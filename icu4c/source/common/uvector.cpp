@@ -13,6 +13,7 @@
 #include "uvector.h"
 #include "cmemory.h"
 #include "uarrsort.h"
+#include "uassert.h"
 #include "uelement.h"
 
 U_NAMESPACE_BEGIN
@@ -78,7 +79,7 @@ void UVector::_init(int32_t initialCapacity, UErrorCode &status) {
         initialCapacity = DEFAULT_CAPACITY;
     }
     elements = (UElement *)uprv_malloc(sizeof(UElement)*initialCapacity);
-    if (elements == 0) {
+    if (elements == nullptr) {
         status = U_MEMORY_ALLOCATION_ERROR;
     } else {
         capacity = initialCapacity;
@@ -96,7 +97,7 @@ UVector::~UVector() {
  * Use the 'assign' function to assign each element.
  */
 void UVector::assign(const UVector& other, UElementAssigner *assign, UErrorCode &ec) {
-    if (ensureCapacity(other.count, ec)) {
+    if (ensureCapacity(other.count, nullptr, ec)) {
         setSize(other.count, ec);
         if (U_SUCCESS(ec)) {
             for (int32_t i=0; i<other.count; ++i) {
@@ -125,13 +126,13 @@ UBool UVector::operator==(const UVector& other) {
 }
 
 void UVector::addElement(void* obj, UErrorCode &status) {
-    if (ensureCapacity(count + 1, status)) {
+    if (ensureCapacity(count + 1, obj, status)) {
         elements[count++].pointer = obj;
     }
 }
 
 void UVector::addElement(int32_t elem, UErrorCode &status) {
-    if (ensureCapacity(count + 1, status)) {
+    if (ensureCapacity(count + 1, nullptr, status)) {
         elements[count].pointer = NULL;     // Pointers may be bigger than ints.
         elements[count].integer = elem;
         count++;
@@ -162,7 +163,7 @@ void UVector::setElementAt(int32_t elem, int32_t index) {
 
 void UVector::insertElementAt(void* obj, int32_t index, UErrorCode &status) {
     // must have 0 <= index <= count
-    if (0 <= index && index <= count && ensureCapacity(count + 1, status)) {
+    if (0 <= index && index <= count && ensureCapacity(count + 1, obj, status)) {
         for (int32_t i=count; i>index; --i) {
             elements[i] = elements[i-1];
         }
@@ -174,7 +175,7 @@ void UVector::insertElementAt(void* obj, int32_t index, UErrorCode &status) {
 
 void UVector::insertElementAt(int32_t elem, int32_t index, UErrorCode &status) {
     // must have 0 <= index <= count
-    if (0 <= index && index <= count && ensureCapacity(count + 1, status)) {
+    if (0 <= index && index <= count && ensureCapacity(count + 1, nullptr, status)) {
         for (int32_t i=count; i>index; --i) {
             elements[i] = elements[i-1];
         }
@@ -328,30 +329,38 @@ int32_t UVector::indexOf(UElement key, int32_t startIndex, int8_t hint) const {
     return -1;
 }
 
-UBool UVector::ensureCapacity(int32_t minimumCapacity, UErrorCode &status) {
-	if (minimumCapacity < 0) {
+UBool UVector::ensureCapacity(int32_t minimumCapacity, void *el, UErrorCode &status) {
+    if (U_FAILURE(status)) {
+        if (deleter && el) { (*deleter)(el); }
+        return false;
+    }
+    if (minimumCapacity < 0) {
         status = U_ILLEGAL_ARGUMENT_ERROR;
-        return FALSE;
-	}
+        if (deleter && el) { (*deleter)(el); }
+        return false;
+    }
     if (capacity < minimumCapacity) {
         if (capacity > (INT32_MAX - 1) / 2) {        	// integer overflow check
-        	status = U_ILLEGAL_ARGUMENT_ERROR;
-        	return FALSE;
+            status = U_ILLEGAL_ARGUMENT_ERROR;
+            if (deleter && el) { (*deleter)(el); }
+            return false;
         }
         int32_t newCap = capacity * 2;
         if (newCap < minimumCapacity) {
             newCap = minimumCapacity;
         }
         if (newCap > (int32_t)(INT32_MAX / sizeof(UElement))) {	// integer overflow check
-        	// We keep the original memory contents on bad minimumCapacity.
-        	status = U_ILLEGAL_ARGUMENT_ERROR;
-        	return FALSE;
+            // We keep the original memory contents on bad minimumCapacity.
+            status = U_ILLEGAL_ARGUMENT_ERROR;
+            if (deleter && el) { (*deleter)(el); }
+            return false;
         }
         UElement* newElems = (UElement *)uprv_realloc(elements, sizeof(UElement)*newCap);
         if (newElems == NULL) {
             // We keep the original contents on the memory failure on realloc or bad minimumCapacity.
             status = U_MEMORY_ALLOCATION_ERROR;
-            return FALSE;
+            if (deleter && el) { (*deleter)(el); }
+            return false;
         }
         elements = newElems;
         capacity = newCap;
@@ -367,11 +376,9 @@ UBool UVector::ensureCapacity(int32_t minimumCapacity, UErrorCode &status) {
  */
 void UVector::setSize(int32_t newSize, UErrorCode &status) {
     int32_t i;
-    if (newSize < 0) {
-        return;
-    }
-    if (newSize > count) {
-        if (!ensureCapacity(newSize, status)) {
+    // TODO: add test for negative newsize.
+    if (newSize > count || newSize < 0 || U_FAILURE(status)) {
+        if (!ensureCapacity(newSize, nullptr, status)) {
             return;
         }
         UElement empty;
@@ -451,6 +458,7 @@ void UVector::sortedInsert(void* obj, UElementComparator *compare, UErrorCode& e
  * be sorted already.
  */
 void UVector::sortedInsert(int32_t obj, UElementComparator *compare, UErrorCode& ec) {
+    U_ASSERT(deleter == nullptr);
     UElement e;
     e.integer = obj;
     sortedInsert(e, compare, ec);
@@ -458,6 +466,9 @@ void UVector::sortedInsert(int32_t obj, UElementComparator *compare, UErrorCode&
 
 // ASSUME elements[] IS CURRENTLY SORTED
 void UVector::sortedInsert(UElement e, UElementComparator *compare, UErrorCode& ec) {
+    if (!ensureCapacity(count + 1, e.pointer, ec)) {
+        return;
+    }
     // Perform a binary search for the location to insert tok at.  Tok
     // will be inserted between two elements a and b such that a <=
     // tok && tok < b, where there is a 'virtual' elements[-1] always
@@ -474,13 +485,11 @@ void UVector::sortedInsert(UElement e, UElementComparator *compare, UErrorCode& 
             min = probe + 1;
         }
     }
-    if (ensureCapacity(count + 1, ec)) {
         for (int32_t i=count; i>min; --i) {
             elements[i] = elements[i-1];
         }
         elements[min] = e;
         ++count;
-    }
 }
 
 /**

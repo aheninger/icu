@@ -30,7 +30,7 @@ public:
     void UVector_API();
     void UStack_API();
     void Hashtable_API();
-
+    void UVector_ErrorHandling();
 };
 
 #endif
