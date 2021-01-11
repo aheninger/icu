@@ -231,6 +231,16 @@ configured to load its data directly from files rather than taking it from the
 default data DLL, and the files are not in the default location. Again, this is
 not common. See [ICU Data](icudata#icu-data-directory).
 
+3. Sanity check that ICU is functioning and able to access data. This is
+important because configuration or installation problems that leave ICU unable
+to load its data do occur, and the resulting failures can be confusing.
+Since not all ICU APIs have UErrorCode parameters, in the absence of data they
+may sometimes silently return incorrect results.
+
+  The function ulocdata_getCLDRVersion() is suitable; it is small and light
+  weight, requires data, and reports the error in the absence of data.
+
+
 When an application is terminating it should call the function `u_cleanup()`,
 which frees all heap storage and other system resources that are held internally
 by the ICU library. While the use of `u_cleanup()` is not strictly required,
