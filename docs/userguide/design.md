@@ -237,8 +237,8 @@ to load its data do occur, and the resulting failures can be confusing.
 Since not all ICU APIs have UErrorCode parameters, in the absence of data they
 may sometimes silently return incorrect results.
 
-> The function ulocdata_getCLDRVersion() is suitable; it is small and light
-  weight, requires data, and reports the error in the absence of data.
+   The function ulocdata_getCLDRVersion() is suitable; it is small and light
+weight, requires data, and reports the error in the absence of data.
 
 
 When an application is terminating it should call the function `u_cleanup()`,
