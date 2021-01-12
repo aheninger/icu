@@ -288,6 +288,11 @@ system dependent.
 For ICU to be used in this way, before unloading, all ICU objects and services
 must be closed or deleted, and `u_cleanup()` must be called.
 
+On Windows, the loading and unloading of ICU should never be done inside
+[DllMain](https://docs.microsoft.com/en-us/windows/win32/dlls/dllmain). Loading
+one of the ICU libraries can cause other libraries or files to be loaded,
+leading to potential dead-lock.
+
 #### Initializing ICU in Multithreaded Environments
 
 There is one specialized case where extra care is needed to safely initialize
