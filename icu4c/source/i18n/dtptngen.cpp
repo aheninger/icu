@@ -2802,6 +2802,8 @@ DTSkeletonEnumeration::DTSkeletonEnumeration(PatternMap& patternMap, dtStrEnum t
                 }
                 fSkeletons->addElement(newElem.getAlias(), status);
                 if (U_FAILURE(status)) {
+                    // TODO: this will leak any strings already added to fSkeletons.
+                    //       Consider using a deleter function with fSkeletons.
                     fSkeletons.adoptInstead(nullptr);
                     return;
                 }

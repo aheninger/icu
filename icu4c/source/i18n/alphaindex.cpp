@@ -495,6 +495,9 @@ BucketList *AlphabeticIndex::createBucketList(UErrorCode &errorCode) const {
             return NULL;
         }
         bucketList->addElement(bucket, errorCode);
+        if (U_FAILURE(errorCode)) {
+            return nullptr;
+        }
         // Remember ASCII and Pinyin buckets for Pinyin redirects.
         UChar c;
         if (current.length() == 1 && 0x41 <= (c = current.charAt(0)) && c <= 0x5A) {  // A-Z
@@ -1010,12 +1013,11 @@ UVector *AlphabeticIndex::firstStringsInScript(UErrorCode &status) {
             // and the one for unassigned implicit weights (Cn).
             continue;
         }
-        UnicodeString *s = new UnicodeString(boundary);
-        if (s == NULL) {
-            status = U_MEMORY_ALLOCATION_ERROR;
-            return NULL;
+        LocalPointer<UnicodeString> s(new UnicodeString(boundary), status);
+        dest->addElement(s.orphan(), status);
+        if (U_FAILURE(status)) {
+            return nullptr;
         }
-        dest->addElement(s, status);
     }
     return dest.orphan();
 }

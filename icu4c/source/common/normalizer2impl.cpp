@@ -2501,10 +2501,13 @@ void CanonIterData::addToStartSet(UChar32 origin, UChar32 decompLead, UErrorCode
                 errorCode=U_MEMORY_ALLOCATION_ERROR;
                 return;
             }
-            UChar32 firstOrigin=(UChar32)(canonValue&CANON_VALUE_MASK);
-            canonValue=(canonValue&~CANON_VALUE_MASK)|CANON_HAS_SET|(uint32_t)canonStartSets.size();
-            umutablecptrie_set(mutableTrie, decompLead, canonValue, &errorCode);
             canonStartSets.addElement(set, errorCode);
+            if (U_FAILURE(errorCode)) {
+                return;
+            }
+            UChar32 firstOrigin=(UChar32)(canonValue&CANON_VALUE_MASK);
+            canonValue=(canonValue&~CANON_VALUE_MASK)|CANON_HAS_SET|(uint32_t)(canonStartSets.size()-1);
+            umutablecptrie_set(mutableTrie, decompLead, canonValue, &errorCode);
             if(firstOrigin!=0) {
                 set->add(firstOrigin);
             }

@@ -983,7 +983,8 @@ VTimeZone::VTimeZone(const VTimeZone& source)
         if (U_SUCCESS(status)) {
             for (int32_t i = 0; i < size; i++) {
                 UnicodeString *line = (UnicodeString*)source.vtzlines->elementAt(i);
-                vtzlines->addElement(line->clone(), status);
+                LocalPointer<UnicodeString> clone(line->clone(), status);
+                vtzlines->addElement(clone.orphan(), status);
                 if (U_FAILURE(status)) {
                     break;
                 }
@@ -1020,6 +1021,7 @@ VTimeZone::operator=(const VTimeZone& right) {
         }
         if (vtzlines != nullptr) {
             delete vtzlines;
+            vtzlines = nullptr;
         }
         if (right.vtzlines != nullptr) {
             UErrorCode status = U_ZERO_ERROR;
@@ -1028,7 +1030,8 @@ VTimeZone::operator=(const VTimeZone& right) {
             if (vtzlines != nullptr && U_SUCCESS(status)) {
                 for (int32_t i = 0; i < size; i++) {
                     UnicodeString *line = (UnicodeString*)right.vtzlines->elementAt(i);
-                    vtzlines->addElement(line->clone(), status);
+                    LocalPointer<UnicodeString> clone(line->clone(), status);
+                    vtzlines->addElement(clone.orphan(), status);
                     if (U_FAILURE(status)) {
                         break;
                     }
@@ -1284,14 +1287,10 @@ VTimeZone::load(VTZReader& reader, UErrorCode& status) {
             // end of file
             if (start && line.startsWith(ICAL_END_VTIMEZONE, -1)) {
                 LocalPointer<UnicodeString> element(new UnicodeString(line), status);
+                vtzlines->addElement(element.orphan(), status);
                 if (U_FAILURE(status)) {
                     goto cleanupVtzlines;
                 }
-                vtzlines->addElement(element.getAlias(), status);
-                if (U_FAILURE(status)) {
-                    goto cleanupVtzlines;
-                }
-                element.orphan(); // on success, vtzlines owns the object.
                 success = TRUE;
             }
             break;
@@ -1306,14 +1305,10 @@ VTimeZone::load(VTZReader& reader, UErrorCode& status) {
                 if (start) {
                     if (line.length() > 0) {
                         LocalPointer<UnicodeString> element(new UnicodeString(line), status);
+                        vtzlines->addElement(element.orphan(), status);
                         if (U_FAILURE(status)) {
                             goto cleanupVtzlines;
                         }
-                        vtzlines->addElement(element.getAlias(), status);
-                        if (U_FAILURE(status)) {
-                            goto cleanupVtzlines;
-                        }
-                        element.orphan(); // on success, vtzlines owns the object.
                     }
                 }
                 line.remove();
@@ -1329,28 +1324,20 @@ VTimeZone::load(VTZReader& reader, UErrorCode& status) {
                 if (start) {
                     if (line.startsWith(ICAL_END_VTIMEZONE, -1)) {
                         LocalPointer<UnicodeString> element(new UnicodeString(line), status);
+                        vtzlines->addElement(element.orphan(), status);
                         if (U_FAILURE(status)) {
                             goto cleanupVtzlines;
                         }
-                        vtzlines->addElement(element.getAlias(), status);
-                        if (U_FAILURE(status)) {
-                            goto cleanupVtzlines;
-                        }
-                        element.orphan(); // on success, vtzlines owns the object.
                         success = TRUE;
                         break;
                     }
                 } else {
                     if (line.startsWith(ICAL_BEGIN_VTIMEZONE, -1)) {
                         LocalPointer<UnicodeString> element(new UnicodeString(line), status);
+                        vtzlines->addElement(element.orphan(), status);
                         if (U_FAILURE(status)) {
                             goto cleanupVtzlines;
                         }
-                        vtzlines->addElement(element.getAlias(), status);
-                        if (U_FAILURE(status)) {
-                            goto cleanupVtzlines;
-                        }
-                        element.orphan(); // on success, vtzlines owns the object.
                         line.remove();
                         start = TRUE;
                         eol = FALSE;
@@ -1535,14 +1522,10 @@ VTimeZone::parse(UErrorCode& status) {
                 }
                 isRRULE = true;
                 LocalPointer<UnicodeString> element(new UnicodeString(value), status);
+                dates->addElement(element.orphan(), status);
                 if (U_FAILURE(status)) {
                     goto cleanupParse;
                 }
-                dates->addElement(element.getAlias(), status);
-                if (U_FAILURE(status)) {
-                    goto cleanupParse;
-                }
-                element.orphan(); // on success, dates owns the object.
             } else if (name.compare(ICAL_END, -1) == 0) {
                 // Mandatory properties
                 if (dtstart.length() == 0 || from.length() == 0 || to.length() == 0) {
@@ -1728,7 +1711,6 @@ VTimeZone::parse(UErrorCode& status) {
             rules->removeElementAt(finalRuleIdx);
             rules->addElement(newRule, status);
             if (U_FAILURE(status)) {
-                delete newRule;
                 goto cleanupParse;
             }
         }
@@ -1858,7 +1840,6 @@ VTimeZone::write(UDate start, VTZWriter& writer, UErrorCode& status) const {
         icutzprop->append((UChar)0x005D/*']'*/);
         customProps.addElement(icutzprop, status);
         if (U_FAILURE(status)) {
-            delete icutzprop;
             goto cleanupWritePartial;
         }
     }
@@ -1917,7 +1898,6 @@ VTimeZone::writeSimple(UDate time, VTZWriter& writer, UErrorCode& status) const 
             icutzprop->append((UChar)0x005D/*']'*/);
             customProps.addElement(icutzprop, status);
             if (U_FAILURE(status)) {
-                delete icutzprop;
                 goto cleanupWriteSimple;
             }
         }

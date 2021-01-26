@@ -328,8 +328,14 @@ BasicTimeZone::getTimeZoneRulesAfter(UDate start, InitialTimeZoneRule*& initial,
         goto error;
     }
     for (i = 0; i < ruleCount; i++) {
-        orgRules->addElement(orgtrs[i]->clone(), status);
+        TimeZoneRule *ruleClone = orgtrs[i]->clone();
+        if (ruleClone == nullptr) {
+            status = U_MEMORY_ALLOCATION_ERROR;
+            goto error;
+        }
+        orgRules->addElement(ruleClone, status);
         if (U_FAILURE(status)) {
+            delete ruleClone;
             goto error;
         }
     }
@@ -418,8 +424,14 @@ BasicTimeZone::getTimeZoneRulesAfter(UDate start, InitialTimeZoneRule*& initial,
                 tar->getFirstStart(tzt.getFrom()->getRawOffset(), tzt.getFrom()->getDSTSavings(), firstStart);
                 if (firstStart > start) {
                     // Just add the rule as is
-                    filteredRules->addElement(tar->clone(), status);
+                    TimeArrayTimeZoneRule *clone = tar->clone();
+                    if (clone == nullptr) {
+                        status = U_MEMORY_ALLOCATION_ERROR;
+                        goto error;
+                    }
+                    filteredRules->addElement(clone, status);
                     if (U_FAILURE(status)) {
+                        delete clone;
                         goto error;
                     }
                 } else {
@@ -460,9 +472,13 @@ BasicTimeZone::getTimeZoneRulesAfter(UDate start, InitialTimeZoneRule*& initial,
                         tar->getName(name);
                         TimeArrayTimeZoneRule *newTar = new TimeArrayTimeZoneRule(name,
                             tar->getRawOffset(), tar->getDSTSavings(), newTimes, asize, timeType);
+                        if (newTar == nullptr) {
+                            status = U_MEMORY_ALLOCATION_ERROR;
+                        }
                         uprv_free(newTimes);
                         filteredRules->addElement(newTar, status);
                         if (U_FAILURE(status)) {
+                            delete newTar;
                             goto error;
                         }
                     }
@@ -472,8 +488,13 @@ BasicTimeZone::getTimeZoneRulesAfter(UDate start, InitialTimeZoneRule*& initial,
             ar->getFirstStart(tzt.getFrom()->getRawOffset(), tzt.getFrom()->getDSTSavings(), firstStart);
             if (firstStart == tzt.getTime()) {
                 // Just add the rule as is
-                filteredRules->addElement(ar->clone(), status);
+                AnnualTimeZoneRule *clone = ar->clone();
+                if (clone == nullptr) {
+                    status = U_MEMORY_ALLOCATION_ERROR;
+                }
+                filteredRules->addElement(clone, status);
                 if (U_FAILURE(status)) {
+                    delete clone;
                     goto error;
                 }
             } else {
@@ -482,10 +503,14 @@ BasicTimeZone::getTimeZoneRulesAfter(UDate start, InitialTimeZoneRule*& initial,
                 Grego::timeToFields(tzt.getTime(), year, month, dom, dow, doy, mid);
                 // Re-create the rule
                 ar->getName(name);
-                AnnualTimeZoneRule *newAr = new AnnualTimeZoneRule(name, ar->getRawOffset(), ar->getDSTSavings(),
-                    *(ar->getRule()), year, ar->getEndYear());
+                AnnualTimeZoneRule *newAr = new AnnualTimeZoneRule(
+                        name, ar->getRawOffset(), ar->getDSTSavings(), *(ar->getRule()), year, ar->getEndYear());
+                if (newAr == nullptr) {
+                    status = U_MEMORY_ALLOCATION_ERROR;
+                }
                 filteredRules->addElement(newAr, status);
                 if (U_FAILURE(status)) {
+                    delete newAr;
                     goto error;
                 }
             }

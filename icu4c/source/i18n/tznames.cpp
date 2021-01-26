@@ -420,9 +420,6 @@ TimeZoneNames::MatchInfoCollection::addZone(UTimeZoneNameType nameType, int32_t 
         return;
     }
     matches(status)->addElement(matchInfo, status);
-    if (U_FAILURE(status)) {
-        delete matchInfo;
-    }
 }
 
 void
@@ -437,9 +434,6 @@ TimeZoneNames::MatchInfoCollection::addMetaZone(UTimeZoneNameType nameType, int3
         return;
     }
     matches(status)->addElement(matchInfo, status);
-    if (U_FAILURE(status)) {
-        delete matchInfo;
-    }
 }
 
 int32_t

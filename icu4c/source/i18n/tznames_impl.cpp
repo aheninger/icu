@@ -148,15 +148,22 @@ CharacterNode::addValue(void *value, UObjectDeleter *valueDeleter, UErrorCode &s
         if (!fHasValuesVector) {
             // There is only one value so far, and not in a vector yet.
             // Create a vector and add the old value.
-            UVector *values = new UVector(valueDeleter, NULL, DEFAULT_CHARACTERNODE_CAPACITY, status);
+            LocalPointer<UVector> values(
+                new UVector(nullptr, nullptr, DEFAULT_CHARACTERNODE_CAPACITY, status), status);
+            if (U_SUCCESS(status)) {
+                // Note: The values vector is initially created without its deleter
+                //       function so that a failure of this addElement() will not auto-delete
+                //       the pre-existing value from fValues.
+                values->addElement(fValues, status);
+            }
             if (U_FAILURE(status)) {
                 if (valueDeleter) {
                     valueDeleter(value);
                 }
                 return;
             }
-            values->addElement(fValues, status);
-            fValues = values;
+            values->setDeleter(valueDeleter);
+            fValues = values.orphan();
             fHasValuesVector = TRUE;
         }
         // Add the new value.

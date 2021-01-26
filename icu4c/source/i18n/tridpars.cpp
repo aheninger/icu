@@ -496,7 +496,6 @@ void TransliteratorIDParser::instantiateList(UVector& list,
             }
             tlist.addElement(t, ec);
             if (U_FAILURE(ec)) {
-                delete t;
                 goto RETURN;
             }
         }
@@ -506,13 +505,9 @@ void TransliteratorIDParser::instantiateList(UVector& list,
     if (tlist.size() == 0) {
         t = createBasicInstance(UnicodeString(TRUE, ANY_NULL, 8), NULL);
         if (t == NULL) {
-            // Should never happen
-            ec = U_INTERNAL_TRANSLITERATOR_ERROR;
+            ec = U_MEMORY_ALLOCATION_ERROR;
         }
         tlist.addElement(t, ec);
-        if (U_FAILURE(ec)) {
-            delete t;
-        }
     }
 
  RETURN:

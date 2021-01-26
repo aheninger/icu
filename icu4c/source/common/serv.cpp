@@ -641,7 +641,9 @@ ICUService::getVisibleIDs(UVector& result, const UnicodeString* matchID, UErrorC
                 }
                 result.addElement(idClone, status);
                 if (U_FAILURE(status)) {
-                    delete idClone;
+                    if (!result.hasDeleter()) {
+                        delete idClone;
+                    }
                     break;
                 }
             }

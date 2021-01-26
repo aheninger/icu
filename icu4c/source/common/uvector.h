@@ -164,14 +164,19 @@ public:
     /**
      * Combination of ensuring a minimum capacity and error handling.
      *
-     * If the requested minimum capacity is not attainable,
-     * or if there is an incoming error code,
-     * and the UVector has an element deleter function, then
-     * delete the incoming element that would otherwise have been added to & adopted
-     * by the UVector.
+     * If the requested minimum capacity is available, return true.
      *
-     * Return true if the requested minimum capacity was avaialble.
-     * In the case of failure, return false and set the error code appropriately.
+     * If the requested minimum capacity is not attainable,
+     * or if there is an incoming error code, return false.
+     *
+     * @param minimumCapacity the minimum acceptabale capacity.
+     * @param el an element to be deleted in the case of error, when the minimum capacity
+     *           is not available. Used to avoid memory leaks when functions that
+     *           normally adopt an element into the vector must fail for lack of capacity.
+     *           Pass nullptr if deletion-on-failure is not desired.
+     *           This deletion-on-failure behavior only occurs with UVectors
+     *           that have an element deleter function.
+     * @param status in/out ICU error code.
      */
     UBool ensureCapacity(int32_t minimumCapacity, void *el, UErrorCode &status);
 
@@ -191,6 +196,8 @@ public:
     //------------------------------------------------------------
     // New API
     //------------------------------------------------------------
+
+    UBool hasDeleter() {return deleter != nullptr;};
 
     UObjectDeleter *setDeleter(UObjectDeleter *d);
 
@@ -306,9 +313,6 @@ public:
     UStack(UObjectDeleter *d, UElementsAreEqual *c, int32_t initialCapacity, UErrorCode &status);
 
     virtual ~UStack();
-
-    // It's okay not to have a virtual destructor (in UVector)
-    // because UStack has no special cleanup to do.
 
     inline UBool empty(void) const;
 

@@ -189,7 +189,6 @@ LocaleMatcher::Builder &LocaleMatcher::Builder::setSupportedLocalesFromListStrin
         if (locale == nullptr) { continue; }
         supportedLocales_->addElement(locale, errorCode_);
         if (U_FAILURE(errorCode_)) {
-            delete locale;
             break;
         }
     }
@@ -209,7 +208,6 @@ LocaleMatcher::Builder &LocaleMatcher::Builder::setSupportedLocales(Locale::Iter
         }
         supportedLocales_->addElement(clone, errorCode_);
         if (U_FAILURE(errorCode_)) {
-            delete clone;
             break;
         }
     }
@@ -224,9 +222,6 @@ LocaleMatcher::Builder &LocaleMatcher::Builder::addSupportedLocale(const Locale 
         return *this;
     }
     supportedLocales_->addElement(clone, errorCode_);
-    if (U_FAILURE(errorCode_)) {
-        delete clone;
-    }
     return *this;
 }
 

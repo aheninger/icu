@@ -10,6 +10,8 @@
 **********************************************************************
 */
 
+#include <algorithm>
+
 #include "uvector.h"
 #include "cmemory.h"
 #include "uarrsort.h"
@@ -334,30 +336,21 @@ UBool UVector::ensureCapacity(int32_t minimumCapacity, void *el, UErrorCode &sta
         if (deleter && el) { (*deleter)(el); }
         return false;
     }
-    if (minimumCapacity < 0) {
+    // Note: max allowed capacity is limited to what will not overflow size
+    //       computations in 32 bit environments. Even in 64 bit envioronments.
+    constexpr int32_t MAX_CAPACITY = INT32_MAX / sizeof(UElement);
+
+    if (minimumCapacity < 0 || minimumCapacity > MAX_CAPACITY) {
         status = U_ILLEGAL_ARGUMENT_ERROR;
         if (deleter && el) { (*deleter)(el); }
         return false;
     }
     if (capacity < minimumCapacity) {
-        if (capacity > (INT32_MAX - 1) / 2) {        	// integer overflow check
-            status = U_ILLEGAL_ARGUMENT_ERROR;
-            if (deleter && el) { (*deleter)(el); }
-            return false;
-        }
-        int32_t newCap = capacity * 2;
-        if (newCap < minimumCapacity) {
-            newCap = minimumCapacity;
-        }
-        if (newCap > (int32_t)(INT32_MAX / sizeof(UElement))) {	// integer overflow check
-            // We keep the original memory contents on bad minimumCapacity.
-            status = U_ILLEGAL_ARGUMENT_ERROR;
-            if (deleter && el) { (*deleter)(el); }
-            return false;
-        }
+        int32_t newCap = std::min(capacity * 2, MAX_CAPACITY);
+        newCap = std::max(minimumCapacity, newCap);
         UElement* newElems = (UElement *)uprv_realloc(elements, sizeof(UElement)*newCap);
-        if (newElems == NULL) {
-            // We keep the original contents on the memory failure on realloc or bad minimumCapacity.
+        if (newElems == nullptr) {
+            // We keep the original contents on the memory failure on realloc.
             status = U_MEMORY_ALLOCATION_ERROR;
             if (deleter && el) { (*deleter)(el); }
             return false;
@@ -376,9 +369,9 @@ UBool UVector::ensureCapacity(int32_t minimumCapacity, void *el, UErrorCode &sta
  */
 void UVector::setSize(int32_t newSize, UErrorCode &status) {
     int32_t i;
-    // TODO: add test for negative newsize.
     if (newSize > count || newSize < 0 || U_FAILURE(status)) {
         if (!ensureCapacity(newSize, nullptr, status)) {
+            // Note: ensureCapacity will fail with negative newsize.
             return;
         }
         UElement empty;

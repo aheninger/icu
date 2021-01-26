@@ -1538,7 +1538,6 @@ PluralKeywordEnumeration::PluralKeywordEnumeration(RuleChain *header, UErrorCode
         }
         fKeywordNames.addElement(newElem, status);
         if (U_FAILURE(status)) {
-            delete newElem;
             return;
         }
         if (0 == node->fKeyword.compare(PLURAL_KEYWORD_OTHER, 5)) {
@@ -1555,7 +1554,6 @@ PluralKeywordEnumeration::PluralKeywordEnumeration(RuleChain *header, UErrorCode
         }
         fKeywordNames.addElement(newElem, status);
         if (U_FAILURE(status)) {
-            delete newElem;
             return;
         }
     }

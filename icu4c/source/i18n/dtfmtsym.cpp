@@ -1570,25 +1570,20 @@ struct CalendarDataSink : public ResourceSink {
                     if (U_FAILURE(errorCode)) { return; }
                 }
                 LocalPointer<UnicodeString> aliasRelativePathCopy(new UnicodeString(aliasRelativePath), errorCode);
-                resourcesToVisitNext->addElement(aliasRelativePathCopy.getAlias(), errorCode);
+                resourcesToVisitNext->addElement(aliasRelativePathCopy.orphan(), errorCode);
+                // addElement() takes ownership, or deletes the item in the event of an error.
                 if (U_FAILURE(errorCode)) { return; }
-                // Only release ownership after resourcesToVisitNext takes it (no error happened):
-                aliasRelativePathCopy.orphan();
                 continue;
 
             } else if (aliasType == SAME_CALENDAR) {
                 // Register same-calendar alias
                 if (arrays.get(aliasRelativePath) == NULL && maps.get(aliasRelativePath) == NULL) {
                     LocalPointer<UnicodeString> aliasRelativePathCopy(new UnicodeString(aliasRelativePath), errorCode);
-                    aliasPathPairs.addElement(aliasRelativePathCopy.getAlias(), errorCode);
+                    aliasPathPairs.addElement(aliasRelativePathCopy.orphan(), errorCode);
                     if (U_FAILURE(errorCode)) { return; }
-                    // Only release ownership after aliasPathPairs takes it (no error happened):
-                    aliasRelativePathCopy.orphan();
                     LocalPointer<UnicodeString> keyUStringCopy(new UnicodeString(keyUString), errorCode);
-                    aliasPathPairs.addElement(keyUStringCopy.getAlias(), errorCode);
+                    aliasPathPairs.addElement(keyUStringCopy.orphan(), errorCode);
                     if (U_FAILURE(errorCode)) { return; }
-                    // Only release ownership after aliasPathPairs takes it (no error happened):
-                    keyUStringCopy.orphan();
                 }
                 continue;
             }
@@ -1756,15 +1751,11 @@ struct CalendarDataSink : public ResourceSink {
             if (aliasType == SAME_CALENDAR) {
                 // Store the alias path and the current path on aliasPathPairs
                 LocalPointer<UnicodeString> aliasRelativePathCopy(new UnicodeString(aliasRelativePath), errorCode);
-                aliasPathPairs.addElement(aliasRelativePathCopy.getAlias(), errorCode);
+                aliasPathPairs.addElement(aliasRelativePathCopy.orphan(), errorCode);
                 if (U_FAILURE(errorCode)) { return; }
-                // Only release ownership after aliasPathPairs takes it (no error happened):
-                aliasRelativePathCopy.orphan();
                 LocalPointer<UnicodeString> pathCopy(new UnicodeString(path), errorCode);
-                aliasPathPairs.addElement(pathCopy.getAlias(), errorCode);
+                aliasPathPairs.addElement(pathCopy.orphan(), errorCode);
                 if (U_FAILURE(errorCode)) { return; }
-                // Only release ownership after aliasPathPairs takes it (no error happened):
-                pathCopy.orphan();
 
                 // Drop the latest key on the path and continue
                 path.retainBetween(0, pathLength);
