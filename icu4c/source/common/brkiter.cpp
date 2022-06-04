@@ -65,7 +65,6 @@ BreakIterator::buildInstance(const Locale& loc, const char *type, UErrorCode &st
     UResourceBundle brkNameStack;
     UResourceBundle *brkRules = &brkRulesStack;
     UResourceBundle *brkName  = &brkNameStack;
-    RuleBasedBreakIterator *result = NULL;
 
     if (U_FAILURE(status))
         return NULL;
@@ -74,11 +73,11 @@ BreakIterator::buildInstance(const Locale& loc, const char *type, UErrorCode &st
     ures_initStackObject(brkName);
 
     // Get the locale
-    UResourceBundle *b = ures_openNoDefault(U_ICUDATA_BRKITR, loc.getName(), &status);
+    LocalUResourceBundlePointer b(ures_openNoDefault(U_ICUDATA_BRKITR, loc.getName(), &status));
 
     // Get the "boundaries" array.
     if (U_SUCCESS(status)) {
-        brkRules = ures_getByKeyWithFallback(b, "boundaries", brkRules, &status);
+        brkRules = ures_getByKeyWithFallback(b.getAlias(), "boundaries", brkRules, &status);
         // Get the string object naming the rules file
         brkName = ures_getByKeyWithFallback(brkRules, type, brkName, &status);
         // Get the actual string
@@ -109,37 +108,24 @@ BreakIterator::buildInstance(const Locale& loc, const char *type, UErrorCode &st
     ures_close(brkRules);
     ures_close(brkName);
 
-    UDataMemory* file = udata_open(U_ICUDATA_BRKITR, ext, fnbuff, &status);
+    LocalUDataMemoryPointer file(udata_open(U_ICUDATA_BRKITR, ext, fnbuff, &status));
     if (U_FAILURE(status)) {
-        ures_close(b);
-        return NULL;
+        return nullptr;
     }
 
     // Create a RuleBasedBreakIterator
-    result = new RuleBasedBreakIterator(file, uprv_strstr(type, "phrase") != NULL, status);
+    bool isPhraseBreak = uprv_strstr(type, "phrase") != NULL;
+    LocalPointer<RuleBasedBreakIterator> result(
+        new RuleBasedBreakIterator(std::move(file), isPhraseBreak, status), status);
+    if (U_FAILURE(status)) {
+        return nullptr;
+    }
 
     // If there is a result, set the valid locale and actual locale, and the kind
-    if (U_SUCCESS(status) && result != NULL) {
-        U_LOCALE_BASED(locBased, *(BreakIterator*)result);
-        locBased.setLocaleIDs(ures_getLocaleByType(b, ULOC_VALID_LOCALE, &status), 
+    U_LOCALE_BASED(locBased, *(BreakIterator*)result.getAlias());
+    locBased.setLocaleIDs(ures_getLocaleByType(b.getAlias(), ULOC_VALID_LOCALE, &status),
                               actualLocale.data());
-    }
-
-    ures_close(b);
-
-    if (U_FAILURE(status) && result != NULL) {  // Sometimes redundant check, but simple
-        delete result;
-        return NULL;
-    }
-
-    if (result == NULL) {
-        udata_close(file);
-        if (U_SUCCESS(status)) {
-            status = U_MEMORY_ALLOCATION_ERROR;
-        }
-    }
-
-    return result;
+    return result.orphan();
 }
 
 // Creates a break iterator for word breaks.

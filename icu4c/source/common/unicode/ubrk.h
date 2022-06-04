@@ -402,7 +402,7 @@ U_NAMESPACE_END
  * @draft ICU 72
  */
 U_CAPI bool U_EXPORT2
-ubrk_copyErrorTo(UBreakIterator* bi,
+ubrk_copyErrorTo(const UBreakIterator* bi,
                  UErrorCode*     outErrorCode);
 #endif // U_HIDE_DRAFT_API
 

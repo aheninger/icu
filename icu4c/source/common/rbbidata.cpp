@@ -41,7 +41,7 @@ RBBIDataWrapper::RBBIDataWrapper(const RBBIDataHeader *data, enum EDontAdopt, UE
     fDontFreeData = true;
 }
 
-RBBIDataWrapper::RBBIDataWrapper(UDataMemory* udm, UErrorCode &status) {
+RBBIDataWrapper::RBBIDataWrapper(LocalUDataMemoryPointer udm, UErrorCode &status) {
     init0();
     if (U_FAILURE(status)) {
         return;
@@ -63,7 +63,7 @@ RBBIDataWrapper::RBBIDataWrapper(UDataMemory* udm, UErrorCode &status) {
     const char *dataAsBytes = reinterpret_cast<const char *>(dh);
     const RBBIDataHeader *rbbidh = reinterpret_cast<const RBBIDataHeader *>(dataAsBytes + headerSize);
     init(rbbidh, status);
-    fUDataMem = udm;
+    fUDataMem = udm.orphan();
 }
 
 UBool RBBIDataWrapper::isDataVersionAcceptable(const UVersionInfo version) {

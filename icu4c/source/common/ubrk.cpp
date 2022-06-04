@@ -147,16 +147,13 @@ ubrk_openBinaryRules(const uint8_t *binaryRules, int32_t rulesLength,
 U_CAPI UBreakIterator * U_EXPORT2
 ubrk_safeClone(
           const UBreakIterator *bi,
-          void * /*stackBuffer*/,
+          void * stackBuffer,
           int32_t *pBufferSize,
           UErrorCode *status)
 {
-    if (status == NULL || U_FAILURE(*status)){
-        return NULL;
-    }
-    if (bi == NULL) {
-       *status = U_ILLEGAL_ARGUMENT_ERROR;
-        return NULL;
+    (void)stackBuffer;
+    if (ubrk_copyErrorTo(bi, status)) {
+        return nullptr;
     }
     if (pBufferSize != NULL) {
         int32_t inputSize = *pBufferSize;
@@ -187,8 +184,8 @@ ubrk_close(UBreakIterator *bi)
 }
 
 U_CAPI bool U_EXPORT2
-ubrk_copyErrorTo(UBreakIterator* bi,
-                 UErrorCode*     outErrorCode) {
+ubrk_copyErrorTo(const UBreakIterator* bi,
+                 UErrorCode* outErrorCode) {
     return ((BreakIterator *)bi)->copyErrorTo(*outErrorCode);
 }
 
@@ -198,7 +195,10 @@ ubrk_setText(UBreakIterator* bi,
              int32_t         textLength,
              UErrorCode*     status)
 {
-    UText  ut = UTEXT_INITIALIZER;
+    if (U_FAILURE(*status)) {
+        return;
+    }
+    UText  ut UTEXT_INITIALIZER;
     utext_openUChars(&ut, text, textLength, status);
     ((BreakIterator*)bi)->setText(&ut, *status);
     // A stack allocated UText wrapping a UChar * string
@@ -334,10 +334,10 @@ ubrk_getBinaryRules(UBreakIterator *bi,
                     uint8_t *       binaryRules, int32_t rulesCapacity,
                     UErrorCode *    status)
 {
-    if (U_FAILURE(*status)) {
+    if (ubrk_copyErrorTo(bi, status)) {
         return 0;
     }
-    if ((binaryRules == NULL && rulesCapacity > 0) || rulesCapacity < 0) {
+    if ((binaryRules == nullptr && rulesCapacity > 0) || rulesCapacity < 0) {
         *status = U_ILLEGAL_ARGUMENT_ERROR;
         return 0;
     }

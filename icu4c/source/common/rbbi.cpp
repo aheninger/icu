@@ -89,8 +89,8 @@ RuleBasedBreakIterator::RuleBasedBreakIterator(RBBIDataHeader* data, UErrorCode 
 //                 only for internal use.
 //
 //-------------------------------------------------------------------------------
-RuleBasedBreakIterator::RuleBasedBreakIterator(UDataMemory* udm, UBool isPhraseBreaking,
-        UErrorCode &status) : RuleBasedBreakIterator(udm, status)
+RuleBasedBreakIterator::RuleBasedBreakIterator(LocalUDataMemoryPointer udm, UBool isPhraseBreaking,
+        UErrorCode &status) : RuleBasedBreakIterator(std::move(udm), status)
 {
     fIsPhraseBreaking = isPhraseBreaking;
 }
@@ -133,6 +133,21 @@ RuleBasedBreakIterator::RuleBasedBreakIterator(const uint8_t *compiledRules,
     }
 }
 
+//-------------------------------------------------------------------------------
+//
+//   Constructor   from a UDataMemory handle to precompiled break rules
+//                 stored in an ICU data file.
+//
+//                 TODO: deprecate this constructor in favor of the similar one
+//                       taking a LocalUDataMemoryPointer. This one is supposed to
+//                       adopt the udm, but that is difficult to make reliable in
+//                       the presence of memory allocation failures.
+//
+//-------------------------------------------------------------------------------
+RuleBasedBreakIterator::RuleBasedBreakIterator(UDataMemory* udm, UErrorCode &status)
+ : RuleBasedBreakIterator(LocalUDataMemoryPointer(udm), status) {
+}
+
 
 //-------------------------------------------------------------------------------
 //
@@ -140,11 +155,11 @@ RuleBasedBreakIterator::RuleBasedBreakIterator(const uint8_t *compiledRules,
 //                 stored in an ICU data file.
 //
 //-------------------------------------------------------------------------------
-RuleBasedBreakIterator::RuleBasedBreakIterator(UDataMemory* udm, UErrorCode &status)
+RuleBasedBreakIterator::RuleBasedBreakIterator(LocalUDataMemoryPointer udm, UErrorCode &status)
  : fSCharIter(UnicodeString())
 {
     init(status);
-    fData = new RBBIDataWrapper(udm, status); // status checked in constructor
+    fData = new RBBIDataWrapper(std::move(udm), status); // status checked in constructor
     if (U_FAILURE(status)) {return;}
     if(fData == nullptr) {
         status = U_MEMORY_ALLOCATION_ERROR;
@@ -159,7 +174,6 @@ RuleBasedBreakIterator::RuleBasedBreakIterator(UDataMemory* udm, UErrorCode &sta
         }
     }
 }
-
 
 
 //-------------------------------------------------------------------------------

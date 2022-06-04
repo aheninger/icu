@@ -162,7 +162,7 @@ public:
     };
     RBBIDataWrapper(const RBBIDataHeader *data, UErrorCode &status);
     RBBIDataWrapper(const RBBIDataHeader *data, enum EDontAdopt dontAdopt, UErrorCode &status);
-    RBBIDataWrapper(UDataMemory* udm, UErrorCode &status);
+    RBBIDataWrapper(LocalUDataMemoryPointer udm, UErrorCode &status);
     ~RBBIDataWrapper();
 
     static UBool          isDataVersionAcceptable(const UVersionInfo version);
