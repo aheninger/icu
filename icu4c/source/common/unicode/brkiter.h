@@ -93,6 +93,23 @@ U_NAMESPACE_BEGIN
  * are available at http://www.unicode.org/reports/tr14/ and
  * http://www.unicode.org/reports/tr29/.
  * <p>
+ * Error Handling: Most of the BreakIterator API functions do not take an
+ * ICU UErrorCode parameter for reporting error conditions to the caller.
+ * Instead, in the event that a function cannot complete normally, the
+ * BreakIterator is placed in a "bogus" state, which can be checked later
+ * with the function `BreakIterator::isBogus()`.
+ *
+ * Errors during the use of a break iterator are not normally expected. They
+ * can be caused by memory allocation failures, or by problems with the
+ * dynamic loading of the dictionary data used by word or line break.
+ *
+ * While in a bogus state, the BreakIterator iterations functions,
+ * e.g. `next()` or `previous()` will return `BreakIterator::DONE`.
+ * All other functions will safely take no action.
+ *
+ * The bogus state is sticky; it cannot be cleared. All that can be done
+ * with a bogus BreakIterator is to delete it.
+ * <p>
  * In addition to the C++ API defined in this header file, a
  * plain C API with equivalent functionality is defined in the
  * file ubrk.h
@@ -147,6 +164,15 @@ public:
      * @stable ICU 2.0
      */
     virtual UClassID getDynamicClassID(void) const override = 0;
+
+    /**
+     * Sets the UErrorCode if an error occurred while using the BreakIterator.
+     * Preserves older error codes in the outErrorCode.
+     * @param   outErrorCode Set to an error code if it does not contain one already.
+     * @return  true if `U_FAILURE(outErrorCode)` when the function returns.
+     * @draft ICU 72
+     */
+    virtual bool copyErrorTo(UErrorCode &ec) const;
 
     /**
      * Return a CharacterIterator over the text being analyzed.

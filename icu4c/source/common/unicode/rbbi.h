@@ -75,6 +75,11 @@ public:
 private:
 
     /**
+      * If this BI is in an error state, this is the associated error code.
+      */
+    UErrorCode      fErrorCode;
+
+    /**
       * The current  position of the iterator. Pinned, 0 < fPosition <= text.length.
       * Never has the value UBRK_DONE (-1).
       */
@@ -320,6 +325,20 @@ public:
     //=======================================================================
     // BreakIterator overrides
     //=======================================================================
+
+   /**
+     * Sets the UErrorCode if an error occurred while using the BreakIterator.
+     * Preserves older error codes in the outErrorCode.
+     * @param   outErrorCode Set to an error code if it does not contain one already.
+     * @return  true if `U_FAILURE(outErrorCode)` when the function returns.
+     * @draft ICU 72
+     */
+    virtual bool copyErrorTo(UErrorCode &outErrorCode) const override;
+
+    /**
+     *  @internal
+     */
+    void setError(UErrorCode ec);
 
     /**
      * <p>

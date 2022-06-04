@@ -222,6 +222,10 @@ BreakIterator::~BreakIterator()
 {
 }
 
+bool BreakIterator::copyErrorTo(UErrorCode &ec) const {
+    return U_FAILURE(ec);
+}
+
 // ------------------------------------------
 //
 // Registration

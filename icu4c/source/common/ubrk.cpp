@@ -186,6 +186,12 @@ ubrk_close(UBreakIterator *bi)
     delete (BreakIterator *)bi;
 }
 
+U_CAPI bool U_EXPORT2
+ubrk_copyErrorTo(UBreakIterator* bi,
+                 UErrorCode*     outErrorCode) {
+    return ((BreakIterator *)bi)->copyErrorTo(*outErrorCode);
+}
+
 U_CAPI void U_EXPORT2
 ubrk_setText(UBreakIterator* bi,
              const UChar*    text,

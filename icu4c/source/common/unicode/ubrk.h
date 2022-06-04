@@ -375,6 +375,37 @@ U_NAMESPACE_END
 
 #endif
 
+#ifndef U_HIDE_DRAFT_API
+/**
+ * Sets the UErrorCode if an error occurred while using this UBreakIterator.
+ *
+ * Many of the UBreakIterator functions do not take an
+ * ICU UErrorCode parameter for reporting error conditions to the caller.
+ * Instead, in the event that a function cannot complete normally, the
+ * BreakIterator is placed in an error state, which can be checked later
+ * with this function.
+ *
+ * Errors during use of a break iterator are not normally expected. They
+ * can be caused by memory allocation failures, or by problems with the
+ * dynamic loading of the dictionary data used by word or line break.
+ *
+ * While in an error state, the BreakIterator iteration functions,
+ * including `ubrk_next()` and `ubrk_previous()`, will return `UBRK_DONE`.
+ * All other functions will safely take no action.
+ *
+ * The error state is sticky; it cannot be cleared. All that can be done
+ * with an error-state UBreakIterator is to close it.
+ *
+ * @param   bi The UBreakIterator to check
+ * @param   outErrorCode Set to an error code if it does not contain one already.
+ * @return  true if `U_FAILURE(*outErrorCode)` when the function returns.
+ * @draft ICU 72
+ */
+U_CAPI bool U_EXPORT2
+ubrk_copyErrorTo(UBreakIterator* bi,
+                 UErrorCode*     outErrorCode);
+#endif // U_HIDE_DRAFT_API
+
 /**
  * Sets an existing iterator to point to a new piece of text.
  * The break iterator retains a pointer to the supplied text.

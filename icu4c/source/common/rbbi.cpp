@@ -256,6 +256,15 @@ RuleBasedBreakIterator::~RuleBasedBreakIterator() {
  */
 RuleBasedBreakIterator&
 RuleBasedBreakIterator::operator=(const RuleBasedBreakIterator& that) {
+    UErrorCode status = U_ZERO_ERROR;
+    if (copyErrorTo(status)) {
+        return *this;
+    }
+    if (that.copyErrorTo(status)) {
+        setError(status);
+        return *this;
+    }
+
     if (this == &that) {
         return *this;
     }
@@ -266,13 +275,16 @@ RuleBasedBreakIterator::operator=(const RuleBasedBreakIterator& that) {
         fLanguageBreakEngines = NULL;   // Just rebuild for now
     }
     // TODO: clone fLanguageBreakEngines from "that"
-    UErrorCode status = U_ZERO_ERROR;
     utext_clone(&fText, &that.fText, false, true, &status);
 
     if (fCharIter != &fSCharIter) {
         delete fCharIter;
     }
     fCharIter = &fSCharIter;
+
+    // TODO: this is  a gawdawful mess.
+    //       Propose that assignemnt _not_ bring along the source input text.
+    //       There is no legit use.
 
     if (that.fCharIter != NULL && that.fCharIter != &that.fSCharIter) {
         // This is a little bit tricky - it will initially appear that
@@ -326,6 +338,7 @@ RuleBasedBreakIterator::operator=(const RuleBasedBreakIterator& that) {
 void RuleBasedBreakIterator::init(UErrorCode &status) {
     fCharIter             = nullptr;
     fData                 = nullptr;
+    fErrorCode              = U_ZERO_ERROR;
     fPosition             = 0;
     fRuleStatusIndex      = 0;
     fDone                 = false;
@@ -342,7 +355,8 @@ void RuleBasedBreakIterator::init(UErrorCode &status) {
     static const UText initializedUText = UTEXT_INITIALIZER;
     uprv_memcpy(&fText, &initializedUText, sizeof(UText));
 
-   if (U_FAILURE(status)) {
+    if (U_FAILURE(status)) {
+        setError(status);
         return;
     }
 
@@ -351,6 +365,9 @@ void RuleBasedBreakIterator::init(UErrorCode &status) {
     fBreakCache      = new BreakCache(this, status);
     if (U_SUCCESS(status) && (fDictionaryCache == NULL || fBreakCache == NULL)) {
         status = U_MEMORY_ALLOCATION_ERROR;
+    }
+    if (U_FAILURE(status)) {
+        setError(status);
     }
 
 #ifdef RBBI_DEBUG
@@ -365,7 +382,16 @@ void RuleBasedBreakIterator::init(UErrorCode &status) {
 #endif
 }
 
-
+//-----------------------------------------------------------------------------
+//
+//    setToBogus
+//
+//-----------------------------------------------------------------------------
+void RuleBasedBreakIterator::setError(UErrorCode ec) {
+    fErrorCode = ec;
+    delete fBreakCache;
+    fBreakCache = nullptr;
+}
 
 //-----------------------------------------------------------------------------
 //
@@ -376,7 +402,9 @@ void RuleBasedBreakIterator::init(UErrorCode &status) {
 //-----------------------------------------------------------------------------
 RuleBasedBreakIterator*
 RuleBasedBreakIterator::clone() const {
-    return new RuleBasedBreakIterator(*this);
+    UErrorCode ec = U_ZERO_ERROR;
+    LocalPointer<RuleBasedBreakIterator> lpResult(new RuleBasedBreakIterator(*this));
+    return lpResult.isValid() && !lpResult->copyErrorTo(ec) ? lpResult.orphan() : nullptr;
 }
 
 /**
@@ -386,6 +414,10 @@ RuleBasedBreakIterator::clone() const {
 bool
 RuleBasedBreakIterator::operator==(const BreakIterator& that) const {
     if (typeid(*this) != typeid(that)) {
+        return false;
+    }
+    UErrorCode ec = U_ZERO_ERROR;
+    if (this->copyErrorTo(ec) || that.copyErrorTo(ec)) {
         return false;
     }
     if (this == &that) {
@@ -426,15 +458,23 @@ RuleBasedBreakIterator::operator==(const BreakIterator& that) const {
 int32_t
 RuleBasedBreakIterator::hashCode(void) const {
     int32_t   hash = 0;
-    if (fData != NULL) {
+    UErrorCode ec = U_ZERO_ERROR;
+    if (!copyErrorTo(ec) && fData != nullptr) {
         hash = fData->hashCode();
     }
     return hash;
 }
 
+bool RuleBasedBreakIterator::copyErrorTo(UErrorCode &outErrorCode) const {
+    if (U_FAILURE(outErrorCode)) {
+        return true;
+    }
+    outErrorCode = fErrorCode;
+    return U_FAILURE(fErrorCode);
+}
 
 void RuleBasedBreakIterator::setText(UText *ut, UErrorCode &status) {
-    if (U_FAILURE(status)) {
+    if (U_FAILURE(status) || copyErrorTo(status)) {
         return;
     }
     fBreakCache->reset();
@@ -621,6 +661,9 @@ int32_t RuleBasedBreakIterator::next(int32_t n) {
  * @return The position of the first boundary after this one.
  */
 int32_t RuleBasedBreakIterator::next(void) {
+    if (fBreakCache == nullptr) {
+        return UBRK_DONE;
+    }
     fBreakCache->next();
     return fDone ? UBRK_DONE : fPosition;
 }
