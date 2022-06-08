@@ -152,6 +152,13 @@ ubrk_safeClone(
           UErrorCode *status)
 {
     (void)stackBuffer;
+    if (status == nullptr || U_FAILURE(*status)) {
+        return nullptr;
+    }
+    if (bi == nullptr) {
+        *status = U_ILLEGAL_ARGUMENT_ERROR;
+        return nullptr;
+    }
     if (ubrk_copyErrorTo(bi, status)) {
         return nullptr;
     }

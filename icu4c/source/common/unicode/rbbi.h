@@ -131,7 +131,7 @@ private:
     /**
      *   A character iterator that refers to the same text as the UText, above.
      *   Only included for compatibility with old API, which was based on CharacterIterators.
-     *   Value may be adopted from outside, or one of fSCharIter or fDCharIter, below.
+     *   Value may be adopted from outside, or one of fSCharIter, below.
      */
     CharacterIterator  *fCharIter;
 

@@ -352,7 +352,7 @@ RuleBasedBreakIterator::operator=(const RuleBasedBreakIterator& that) {
 void RuleBasedBreakIterator::init(UErrorCode &status) {
     fCharIter             = nullptr;
     fData                 = nullptr;
-    fErrorCode              = U_ZERO_ERROR;
+    fErrorCode            = U_ZERO_ERROR;
     fPosition             = 0;
     fRuleStatusIndex      = 0;
     fDone                 = false;
@@ -363,11 +363,7 @@ void RuleBasedBreakIterator::init(UErrorCode &status) {
     fDictionaryCache      = nullptr;
     fLookAheadMatches     = nullptr;
     fIsPhraseBreaking     = false;
-
-    // Note: IBM xlC is unable to assign or initialize member fText from UTEXT_INITIALIZER.
-    // fText                 = UTEXT_INITIALIZER;
-    static const UText initializedUText = UTEXT_INITIALIZER;
-    uprv_memcpy(&fText, &initializedUText, sizeof(UText));
+    fText                 = UTEXT_INITIALIZER;
 
     if (U_FAILURE(status)) {
         setError(status);
@@ -398,13 +394,22 @@ void RuleBasedBreakIterator::init(UErrorCode &status) {
 
 //-----------------------------------------------------------------------------
 //
-//    setToBogus
+//    setError
 //
 //-----------------------------------------------------------------------------
 void RuleBasedBreakIterator::setError(UErrorCode ec) {
     fErrorCode = ec;
     delete fBreakCache;
     fBreakCache = nullptr;
+
+    // Avoid retaining references to user supplied text. Caller would normally expect
+    // any calls to setText() to do this, but they won't when the BI is in an error state.
+    if (fCharIter != &fSCharIter) {
+        // fCharIter was adopted from the outside.
+        delete fCharIter;
+    }
+    fCharIter = nullptr;
+    utext_close(&fText);
 }
 
 //-----------------------------------------------------------------------------
@@ -488,12 +493,15 @@ bool RuleBasedBreakIterator::copyErrorTo(UErrorCode &outErrorCode) const {
 }
 
 void RuleBasedBreakIterator::setText(UText *ut, UErrorCode &status) {
-    if (U_FAILURE(status) || copyErrorTo(status)) {
+    if (copyErrorTo(status)) {
         return;
     }
     fBreakCache->reset();
     fDictionaryCache->reset();
     utext_clone(&fText, ut, false, true, &status);
+    if (U_FAILURE(status)) {
+        return;
+    }
 
     // Set up a dummy CharacterIterator to be returned if anyone
     //   calls getText().  With input from UText, there is no reasonable
@@ -538,23 +546,33 @@ RuleBasedBreakIterator::getText() const {
  */
 void
 RuleBasedBreakIterator::adoptText(CharacterIterator* newText) {
+    LocalPointer<CharacterIterator> lpNewText(newText);  // adopt the newText.
+    if (U_FAILURE(fErrorCode)) {
+        return;
+    }
     // If we are holding a CharacterIterator adopted from a
     //   previous call to this function, delete it now.
     if (fCharIter != &fSCharIter) {
         delete fCharIter;
+        fCharIter = &fSCharIter;
     }
 
-    fCharIter = newText;
+    if (newText==nullptr || newText->startIndex() != 0) {
+        setError(U_ILLEGAL_ARGUMENT_ERROR);
+        return;
+    }
+
     UErrorCode status = U_ZERO_ERROR;
+    utext_openCharacterIterator(&fText, newText, &status);
+    if (U_FAILURE(status)) {
+        setError(status);
+        return;
+    }
+
+    fCharIter = lpNewText.orphan();
     fBreakCache->reset();
     fDictionaryCache->reset();
-    if (newText==NULL || newText->startIndex() != 0) {
-        // startIndex !=0 wants to be an error, but there's no way to report it.
-        // Make the iterator text be an empty string.
-        utext_openUChars(&fText, NULL, 0, &status);
-    } else {
-        utext_openCharacterIterator(&fText, newText, &status);
-    }
+
     this->first();
 }
 
@@ -565,17 +583,19 @@ RuleBasedBreakIterator::adoptText(CharacterIterator* newText) {
  */
 void
 RuleBasedBreakIterator::setText(const UnicodeString& newText) {
+    if (U_FAILURE(fErrorCode)) {
+        return;
+    }
     UErrorCode status = U_ZERO_ERROR;
     fBreakCache->reset();
     fDictionaryCache->reset();
     utext_openConstUnicodeString(&fText, &newText, &status);
+    if (U_FAILURE(status)) {
+        setError(status);
+        return;
+    }
 
-    // Set up a character iterator on the string.
-    //   Needed in case someone calls getText().
-    //  Can not, unfortunately, do this lazily on the (probably never)
-    //  call to getText(), because getText is const.
     fSCharIter.setText(newText);
-
     if (fCharIter != &fSCharIter) {
         // old fCharIter was adopted from the outside.  Delete it.
         delete fCharIter;
@@ -593,7 +613,7 @@ RuleBasedBreakIterator::setText(const UnicodeString& newText) {
  *  where the data may be moved in memory at arbitrary times.
  */
 RuleBasedBreakIterator &RuleBasedBreakIterator::refreshInputText(UText *input, UErrorCode &status) {
-    if (U_FAILURE(status)) {
+    if (copyErrorTo(status)) {
         return *this;
     }
     if (input == NULL) {
@@ -623,6 +643,9 @@ RuleBasedBreakIterator &RuleBasedBreakIterator::refreshInputText(UText *input, U
  * @return The new iterator position, which is zero.
  */
 int32_t RuleBasedBreakIterator::first(void) {
+    if (U_FAILURE(fErrorCode)) {
+        return 0;
+    }
     UErrorCode status = U_ZERO_ERROR;
     if (!fBreakCache->seek(0)) {
         fBreakCache->populateNear(0, status);
@@ -637,6 +660,9 @@ int32_t RuleBasedBreakIterator::first(void) {
  * @return The text's past-the-end offset.
  */
 int32_t RuleBasedBreakIterator::last(void) {
+    if (U_FAILURE(fErrorCode)) {
+        return 0;
+    }
     int32_t endPos = (int32_t)utext_nativeLength(&fText);
     UBool endShouldBeBoundary = isBoundary(endPos);      // Has side effect of setting iterator position.
     (void)endShouldBeBoundary;
@@ -691,8 +717,15 @@ int32_t RuleBasedBreakIterator::next(void) {
  * @return The position of the boundary position immediately preceding the starting position.
  */
 int32_t RuleBasedBreakIterator::previous(void) {
+    if (fBreakCache == nullptr) {
+        return UBRK_DONE;
+    }
     UErrorCode status = U_ZERO_ERROR;
     fBreakCache->previous(status);
+    if (U_FAILURE(status)) {
+        setError(status);
+        return UBRK_DONE;
+    }
     return fDone ? UBRK_DONE : fPosition;
 }
 
@@ -703,6 +736,9 @@ int32_t RuleBasedBreakIterator::previous(void) {
  * @return The position of the first break after the current position.
  */
 int32_t RuleBasedBreakIterator::following(int32_t startPos) {
+    if (U_FAILURE(fErrorCode)) {
+        return UBRK_DONE;
+    }
     // if the supplied position is before the beginning, return the
     // text's starting offset
     if (startPos < 0) {
@@ -716,6 +752,10 @@ int32_t RuleBasedBreakIterator::following(int32_t startPos) {
 
     UErrorCode status = U_ZERO_ERROR;
     fBreakCache->following(startPos, status);
+    if (U_FAILURE(status)) {
+        setError(status);
+        return UBRK_DONE;
+    }
     return fDone ? UBRK_DONE : fPosition;
 }
 
@@ -726,6 +766,9 @@ int32_t RuleBasedBreakIterator::following(int32_t startPos) {
  * @return The position of the last boundary before the starting position.
  */
 int32_t RuleBasedBreakIterator::preceding(int32_t offset) {
+    if (U_FAILURE(fErrorCode)) {
+        return UBRK_DONE;
+    }
     if (offset > utext_nativeLength(&fText)) {
         return last();
     }
@@ -738,6 +781,10 @@ int32_t RuleBasedBreakIterator::preceding(int32_t offset) {
 
     UErrorCode status = U_ZERO_ERROR;
     fBreakCache->preceding(adjustedOffset, status);
+    if (U_FAILURE(status)) {
+        setError(status);
+        return UBRK_DONE;
+    }
     return fDone ? UBRK_DONE : fPosition;
 }
 
@@ -750,6 +797,9 @@ int32_t RuleBasedBreakIterator::preceding(int32_t offset) {
  * @return True if "offset" is a boundary position.
  */
 UBool RuleBasedBreakIterator::isBoundary(int32_t offset) {
+    if (U_FAILURE(fErrorCode)) {
+        return (offset == 0);
+    }
     // out-of-range indexes are never boundary positions
     if (offset < 0) {
         first();       // For side effects on current position, tag values.
@@ -788,6 +838,9 @@ UBool RuleBasedBreakIterator::isBoundary(int32_t offset) {
  * @return The current iteration position.
  */
 int32_t RuleBasedBreakIterator::current(void) const {
+    if (U_FAILURE(fErrorCode)) {
+        return 0;
+    }
     return fPosition;
 }
 

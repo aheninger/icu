@@ -312,22 +312,19 @@ void RBBIAPITest::TestGetSetAdoptText()
     //   (With the change of the break engine to working with UText internally,
     //    CharacterIterators starting at positions other than zero are not supported)
     rb->adoptText(text3);
-    TEST_ASSERT(rb->preceding(2) == 0);
-    TEST_ASSERT(rb->following(11) == BreakIterator::DONE);
-    //if(rb->preceding(2) != 3) {
-    //    errln((UnicodeString)"ERROR:3 error in adoptText ");
-    //}
-    //if(rb->following(11) != BreakIterator::DONE) {
-    //    errln((UnicodeString)"ERROR:4 error in adoptText ");
-    //}
+    UErrorCode ec = U_ZERO_ERROR;
+    assertTrue(WHERE, rb->copyErrorTo(ec));
+    assertEquals(WHERE, U_ILLEGAL_ARGUMENT_ERROR, ec);
+    assertEquals(WHERE, UBRK_DONE, rb->preceding(2));
+    assertEquals(WHERE, UBRK_DONE, rb->following(11));
 
     // UText API
     //
     //   Quick test to see if UText is working at all.
     //
-    const char *s1 = "\x68\x65\x6C\x6C\x6F\x20\x77\x6F\x72\x6C\x64"; /* "hello world" in UTF-8 */
-    const char *s2 = "\x73\x65\x65\x20\x79\x61"; /* "see ya" in UTF-8 */
-    //                012345678901
+    const char *s1 = u8"hello world";
+    const char *s2 = u8"see ya";
+    //                  012345678901
 
     status.reset();
     LocalUTextPointer ut(utext_openUTF8(NULL, s1, -1, status));
