@@ -11,6 +11,7 @@
 #define BRKENG_H
 
 #include "unicode/utypes.h"
+#include "unicode/uniset.h"
 #include "unicode/uobject.h"
 #include "unicode/utext.h"
 #include "unicode/uscript.h"
@@ -154,7 +155,7 @@ class UnhandledEngine : public LanguageBreakEngine {
      * @internal
      */
 
-  UnicodeSet    *fHandled;
+  UnicodeSet    fHandled;
 
  public:
 

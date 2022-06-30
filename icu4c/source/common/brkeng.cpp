@@ -60,18 +60,16 @@ LanguageBreakFactory::~LanguageBreakFactory() {
  ******************************************************************
  */
 
-UnhandledEngine::UnhandledEngine(UErrorCode &status) : fHandled(nullptr) {
+UnhandledEngine::UnhandledEngine(UErrorCode &status) : fHandled {} {
     (void)status;
 }
 
 UnhandledEngine::~UnhandledEngine() {
-    delete fHandled;
-    fHandled = nullptr;
 }
 
 UBool
 UnhandledEngine::handles(UChar32 c) const {
-    return fHandled && fHandled->contains(c);
+    return fHandled.contains(c);
 }
 
 int32_t
@@ -83,7 +81,7 @@ UnhandledEngine::findBreaks( UText *text,
                              UErrorCode &status) const {
     if (U_FAILURE(status)) return 0;
     UChar32 c = utext_current32(text); 
-    while((int32_t)utext_getNativeIndex(text) < endPos && fHandled->contains(c)) {
+    while((int32_t)utext_getNativeIndex(text) < endPos && fHandled.contains(c)) {
         utext_next32(text);            // TODO:  recast loop to work with post-increment operations.
         c = utext_current32(text);
     }
@@ -92,17 +90,11 @@ UnhandledEngine::findBreaks( UText *text,
 
 void
 UnhandledEngine::handleCharacter(UChar32 c) {
-    if (fHandled == nullptr) {
-        fHandled = new UnicodeSet();
-        if (fHandled == nullptr) {
-            return;
-        }
-    }
-    if (!fHandled->contains(c)) {
+    if (!fHandled.contains(c)) {
         UErrorCode status = U_ZERO_ERROR;
         // Apply the entire script of the character.
         int32_t script = u_getIntPropertyValue(c, UCHAR_SCRIPT);
-        fHandled->applyIntPropertyValue(UCHAR_SCRIPT, script, status);
+        fHandled.applyIntPropertyValue(UCHAR_SCRIPT, script, status);
     }
 }
 

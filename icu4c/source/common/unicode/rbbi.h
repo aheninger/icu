@@ -61,7 +61,7 @@ private:
      * The UText through which this BreakIterator accesses the text
      * @internal (private)
      */
-    UText  fText;
+    UText  fText = UTEXT_INITIALIZER;
 
 #ifndef U_HIDE_INTERNAL_API
 public:
@@ -71,37 +71,45 @@ public:
      * Not for general use; Public only for testing purposes.
      * @internal
      */
-    RBBIDataWrapper    *fData;
+    RBBIDataWrapper    *fData = nullptr;
 private:
 
     /**
       * If this BI is in an error state, this is the associated error code.
       */
-    UErrorCode      fErrorCode;
+    UErrorCode      fErrorCode = U_ZERO_ERROR;
+
+    /**
+     *  When in an error state (U_FAILURE(fErrorCode) is true), this flag
+     *  indicates whether the error is permanent, that is, not
+     *  clearable by setText().
+     */
+    enum EErrorType {RECOVERABLE_ERROR, PERMANENT_ERROR};
+    EErrorType      fPermError = RECOVERABLE_ERROR;
 
     /**
       * The current  position of the iterator. Pinned, 0 < fPosition <= text.length.
       * Never has the value UBRK_DONE (-1).
       */
-    int32_t         fPosition;
+    int32_t         fPosition = 0;
 
     /**
       * TODO:
       */
-    int32_t         fRuleStatusIndex;
+    int32_t         fRuleStatusIndex = 0;
 
     /**
      *   Cache of previously determined boundary positions.
      */
     class BreakCache;
-    BreakCache         *fBreakCache;
+    BreakCache         *fBreakCache = nullptr;
 
     /**
      *  Cache of boundary positions within a region of text that has been
      *  sub-divided by dictionary based breaking.
      */
     class DictionaryCache;
-    DictionaryCache *fDictionaryCache;
+    DictionaryCache *fDictionaryCache = nullptr;
 
     /**
      *
@@ -110,7 +118,7 @@ private:
      * handle a given character.
      * @internal (private)
      */
-    UStack              *fLanguageBreakEngines;
+    UStack              *fLanguageBreakEngines = nullptr;
 
     /**
      *
@@ -119,43 +127,49 @@ private:
      * LanguageBreakEngine.
      * @internal (private)
      */
-    UnhandledEngine     *fUnhandledBreakEngine;
+    UnhandledEngine     *fUnhandledBreakEngine = nullptr;
 
     /**
      * Counter for the number of characters encountered with the "dictionary"
      *   flag set.
      * @internal (private)
      */
-    uint32_t            fDictionaryCharCount;
+    uint32_t            fDictionaryCharCount = 0;
 
     /**
      *   A character iterator that refers to the same text as the UText, above.
      *   Only included for compatibility with old API, which was based on CharacterIterators.
-     *   Value may be adopted from outside, or one of fSCharIter, below.
+     *   Value may be adopted from outside, or fSCharIter, below.
+     *   Constraint: never nullptr. Storage owned by break iterator unless == &fSCharIter.
      */
-    CharacterIterator  *fCharIter;
+    CharacterIterator  *fCharIter = &fSCharIter;
 
     /**
      *   When the input text is provided by a UnicodeString, this will point to
      *    a characterIterator that wraps that data.  Needed only for the
      *    implementation of getText(), a backwards compatibility issue.
      */
-    StringCharacterIterator fSCharIter;
+    UCharCharacterIterator fSCharIter {u"", 0};
+
+    bool fCharIterAdopted() const { return fCharIter != &fSCharIter; };
+    void fCharIterRelease() { if (fCharIterAdopted()) {delete fCharIter;
+                                                       fCharIter = &fSCharIter; }
+                              fSCharIter.setText(u"", 0); }
 
     /**
       * True when iteration has run off the end, and iterator functions should return UBRK_DONE.
       */
-    UBool           fDone;
+    bool           fDone = false;
 
     /**
      *  Array of look-ahead tentative results.
      */
-    int32_t *fLookAheadMatches;
+    int32_t *fLookAheadMatches = nullptr;
 
     /**
      *  A flag to indicate if phrase based breaking is enabled.
      */
-    UBool fIsPhraseBreaking;
+    UBool fIsPhraseBreaking = false;
 
     //=======================================================================
     // constructors
@@ -196,7 +210,8 @@ private:
 public:
 
     /** Default constructor.  Creates an empty shell of an iterator, with no
-     *  rules or text to iterate over.   Object can subsequently be assigned to.
+     *  rules or text to iterate over.   Object can subsequently be assigned to,
+     *  but is otherwise unusable.
      *  @stable ICU 2.2
      */
     RuleBasedBreakIterator();
@@ -293,6 +308,9 @@ public:
     /**
      * Equality operator.  Returns true if both BreakIterators are of the
      * same class, have the same behavior, and iterate over the same text.
+     *
+     * BreakIterators in an error state always compare as not equal.
+     * See copyErrorTo().
      * @param that The BreakIterator to be compared for equality
      * @return true if both BreakIterators are of the
      * same class, have the same behavior, and iterate over the same text.
@@ -316,7 +334,10 @@ public:
      * will correctly clone (copy) a derived class.
      * clone() is thread safe.  Multiple threads may simultaneously
      * clone the same source break iterator.
-     * @return a newly-constructed RuleBasedBreakIterator
+     * @return a newly-constructed RuleBasedBreakIterator,
+     *         or nullptr if creation of the new break iterator fails,
+     *         or if the source break iterator is in an unrecoverable
+     *         error state.
      * @stable ICU 2.0
      */
     virtual RuleBasedBreakIterator* clone() const override;
@@ -348,12 +369,7 @@ public:
      */
     virtual bool copyErrorTo(UErrorCode &outErrorCode) const override;
 
-    /**
-     *  @internal
-     */
-    void setError(UErrorCode ec);
-
-    /**
+   /**
      * <p>
      * Return a CharacterIterator over the text being analyzed.
      * The returned character iterator is owned by the break iterator, and must
@@ -741,6 +757,26 @@ private:
      * @internal (private)
      */
     const LanguageBreakEngine *getLanguageBreakEngine(UChar32 c);
+
+
+   /**
+     *  Put this break iterator into a recoverable error state.
+     *  setText() will clear the error.
+     *  @internal
+     */
+    void setError(UErrorCode ec, EErrorType permanent);
+
+    /**
+     * Clear an error, if possible.
+     * After calling this function, fErrorCode will reflect the
+     * error state, indicating success if an error was succesfullly
+     * cleared, or if there was no error in the first place.
+     *
+     * @return true if the error was succesfully cleared, or there
+     *         was no error in the first place.
+     * @internal
+     */
+    bool clearError();
 
   public:
 #ifndef U_HIDE_INTERNAL_API
