@@ -151,10 +151,11 @@ private:
      */
     UCharCharacterIterator fSCharIter {u"", 0};
 
+    /** return true if fCharIter was adopted from the outside. */
     bool fCharIterAdopted() const { return fCharIter != &fSCharIter; };
-    void fCharIterRelease() { if (fCharIterAdopted()) {delete fCharIter;
-                                                       fCharIter = &fSCharIter; }
-                              fSCharIter.setText(u"", 0); }
+
+    /** Delete and reset to default fCharIter if it was adopted from outside. */
+    void fCharIterRelease();
 
     /**
       * True when iteration has run off the end, and iterator functions should return UBRK_DONE.
@@ -201,6 +202,14 @@ private:
      * @internal (private)
      */
     RuleBasedBreakIterator(LocalUDataMemoryPointer image, UBool isPhraseBreaking, UErrorCode &status);
+
+    /**
+     * Default constructor with an error code parameter.
+     * Aside from error handling, otherwise identical to the default constructor.
+     * Internally, handles common initialization for other constructors.
+     * @internal (private)
+     */
+    RuleBasedBreakIterator(UErrorCode &status);
 
     /** @internal */
     friend class RBBIRuleBuilder;
@@ -697,10 +706,11 @@ private:
     // implementation
     //=======================================================================
     /**
-      * Common initialization function, used by constructors and bufferClone.
-      * @internal (private)
-      */
-    void init(UErrorCode &status);
+     * Dumps caches and performs other actions associated with a complete change
+     * in text or iteration position.
+     * @internal (private)
+     */
+    void reset(void);
 
     /**
      * Iterate backwards from an arbitrary position in the input text using the
