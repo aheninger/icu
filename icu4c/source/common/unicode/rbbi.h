@@ -276,6 +276,10 @@ public:
      * This constructor uses the udata interface to create a BreakIterator
      * whose internal tables live in a memory-mapped file.  "image" is an
      * ICU UDataMemory handle for the pre-compiled break iterator tables.
+     *
+     * TODO: propose deprecating this constructor in favor of one taking a
+     *       LocalUDataMemoryPointer. Makes reliable handling of memory
+     *       allocation failures much simpler.
      * @param image handle to the memory image for the break iterator data.
      *        Ownership of the UDataMemory handle passes to the Break Iterator,
      *        which will be responsible for closing it when it is no longer needed.

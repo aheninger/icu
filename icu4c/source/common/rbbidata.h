@@ -160,7 +160,10 @@ public:
     enum EDontAdopt {
         kDontAdopt
     };
+    // TODO: for memory safety, data should be passed in via a LocalPointer.
+    //       It's a common problem with constructors that adopt storage from a param.
     RBBIDataWrapper(const RBBIDataHeader *data, UErrorCode &status);
+
     RBBIDataWrapper(const RBBIDataHeader *data, enum EDontAdopt dontAdopt, UErrorCode &status);
     RBBIDataWrapper(LocalUDataMemoryPointer udm, UErrorCode &status);
     ~RBBIDataWrapper();

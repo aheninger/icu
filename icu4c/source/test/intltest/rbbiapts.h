@@ -90,6 +90,8 @@ public:
 
     void TestRefreshInputText();
 
+    void TestCopyErrorTo();
+
     /**
      *Internal subroutines
      **/

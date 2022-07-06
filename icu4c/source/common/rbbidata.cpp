@@ -31,6 +31,8 @@ U_NAMESPACE_BEGIN
 //
 //-----------------------------------------------------------------------------
 RBBIDataWrapper::RBBIDataWrapper(const RBBIDataHeader *data, UErrorCode &status) {
+    // TODO: for memory safety, data should be passed in via a LocalPointer.
+    //       It's a common problem with constructors that adopt storage from a param.
     init0();
     init(data, status);
 }

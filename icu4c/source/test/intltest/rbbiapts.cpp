@@ -1163,6 +1163,131 @@ void RBBIAPITest::TestRefreshInputText() {
 
 }
 
+void RBBIAPITest::TestCopyErrorTo() {
+    UErrorCode ec = U_ZERO_ERROR;
+    LocalPointer<RuleBasedBreakIterator> bi, bi2;
+    UText ut UTEXT_INITIALIZER;
+
+    // Ordinary break iterator from factory should show no error
+    bi.adoptInstead((RuleBasedBreakIterator *)BreakIterator::createWordInstance(Locale::getEnglish(), ec));
+    assertSuccess(WHERE, ec);
+    assertFalse(WHERE, bi->copyErrorTo(ec));
+    assertTrue(WHERE, U_SUCCESS(ec));
+
+    // SetText to a bogus string should produce a recoverable error.
+    UnicodeString s {u"abc"};
+    s.setToBogus();
+    bi->setText(s);
+    ec = U_ZERO_ERROR;
+    assertTrue(WHERE, bi->copyErrorTo(ec));
+    assertEquals(WHERE, U_ILLEGAL_ARGUMENT_ERROR, ec);
+    s = u"abc";
+    ec = U_ZERO_ERROR;
+    bi->setText(s);
+    assertFalse(WHERE, bi->copyErrorTo(ec));
+    assertTrue(WHERE, U_SUCCESS(ec));
+
+    // SetText with an incoming error code should set bi into a recoverable error state.
+    ec = U_ZERO_ERROR;
+    utext_openUChars(&ut, u"abc", -1, &ec);
+    assertSuccess(WHERE, ec);
+    ec = U_CE_NOT_FOUND_ERROR;  // an error unrelated to Break Iteration
+    bi->setText(&ut, ec);
+    assertEquals(WHERE, U_CE_NOT_FOUND_ERROR, ec);
+    ec = U_ZERO_ERROR;
+    assertTrue(WHERE, bi->copyErrorTo(ec));
+    assertEquals(WHERE, U_CE_NOT_FOUND_ERROR, ec);
+
+    ec = U_ZERO_ERROR;
+    bi->setText(&ut, ec);
+    assertSuccess(WHERE, ec);
+    assertFalse(WHERE, bi->copyErrorTo(ec));
+    assertSuccess(WHERE, ec);
+
+    // Default constructed bi should show no error, but any attempt to use it should
+    // set it into an error state - it has no rules, and can't do anything.
+    bi.adoptInstead(new RuleBasedBreakIterator);
+    ec = U_ZERO_ERROR;
+    assertFalse(WHERE, bi->copyErrorTo(ec));
+    assertSuccess(WHERE, ec);
+    s = u"abc";
+    bi->setText(s);
+    assertTrue(WHERE, bi->copyErrorTo(ec));
+    assertEquals(WHERE, U_INVALID_STATE_ERROR, ec);
+
+    bi.adoptInstead(new RuleBasedBreakIterator);
+    ec = U_ZERO_ERROR;
+    utext_openUChars(&ut, u"abc", -1, &ec);
+    assertSuccess(WHERE, ec);
+    bi->setText(&ut, ec);
+    assertEquals(WHERE, U_INVALID_STATE_ERROR, ec);
+    ec = U_ZERO_ERROR;
+    assertTrue(WHERE, bi->copyErrorTo(ec));
+    assertEquals(WHERE, U_INVALID_STATE_ERROR, ec);
+
+    bi.adoptInstead(new RuleBasedBreakIterator);
+    bi->adoptText(new UCharCharacterIterator(u"hello", 5));
+    ec = U_ZERO_ERROR;
+    assertTrue(WHERE, bi->copyErrorTo(ec));
+    assertEquals(WHERE, U_INVALID_STATE_ERROR, ec);
+
+    // Assignment to a default-constructed iterator works, even if it
+    // is carrying an error from an attempted use.
+    bi.adoptInstead(new RuleBasedBreakIterator);
+    s = u"abc";
+    bi->setText(s);
+    ec = U_ZERO_ERROR;
+    assertTrue(WHERE, bi->copyErrorTo(ec));  // bi is in a recoverable error state.
+
+    ec = U_ZERO_ERROR;
+    bi2.adoptInstead((RuleBasedBreakIterator *)BreakIterator::createWordInstance(Locale::getEnglish(), ec));
+    assertSuccess(WHERE, ec);
+    *bi.getAlias() = *bi2.getAlias();    // assignment to bi clears its error state.
+    assertFalse(WHERE, bi->copyErrorTo(ec));
+    assertSuccess(WHERE, ec);
+
+    // Constructors with an incoming error, or with invalid parameters, should
+    // leave the break iterator in a permanent error state.
+    s = u"This string does not contain valid Break Rules!!!\n";
+    UParseError pe {};
+    ec = U_ZERO_ERROR;
+    bi.adoptInstead(new RuleBasedBreakIterator(s, pe, ec));
+    assertEquals(WHERE, U_BRK_RULE_SYNTAX, ec);
+    ec = U_ZERO_ERROR;
+    assertTrue(WHERE, bi->copyErrorTo(ec));
+    assertEquals(WHERE, U_BRK_RULE_SYNTAX, ec);
+    bi->setText(s);    // does not clear a permanent error.
+    ec = U_ZERO_ERROR;
+    assertTrue(WHERE, bi->copyErrorTo(ec));
+    assertEquals(WHERE, U_BRK_RULE_SYNTAX, ec);
+
+    s = u"[abc]+ ; # This is a valid break rule.\n";
+    ec = U_ZERO_ERROR;
+    bi.adoptInstead(new RuleBasedBreakIterator(s, pe, ec));
+    assertSuccess(WHERE, ec);  // Double-check that s is ok as rules.
+    ec = U_CE_NOT_FOUND_ERROR;
+    bi.adoptInstead(new RuleBasedBreakIterator(s, pe, ec));
+    assertEquals(WHERE, U_CE_NOT_FOUND_ERROR, ec);
+    ec = U_ZERO_ERROR;
+    assertTrue(WHERE, bi->copyErrorTo(ec));
+    assertEquals(WHERE, U_CE_NOT_FOUND_ERROR, ec);
+    ec = U_ZERO_ERROR;
+    bi->setText(s);    // Permanent error. setText() shouldn't clear it.
+    assertTrue(WHERE, bi->copyErrorTo(ec));
+    assertEquals(WHERE, U_CE_NOT_FOUND_ERROR, ec);
+
+    // Break iterator constructor from pre-compiled rules...
+    uint8_t bogusRules[20] {};
+    ec = U_ZERO_ERROR;
+    bi.adoptInstead(new RuleBasedBreakIterator(bogusRules, sizeof(bogusRules), ec));
+    assertEquals(WHERE, U_ILLEGAL_ARGUMENT_ERROR, ec);
+    ec = U_ZERO_ERROR;
+    assertTrue(WHERE, bi->copyErrorTo(ec));
+    assertEquals(WHERE, U_ILLEGAL_ARGUMENT_ERROR, ec);
+
+    // Continue with the rest of the API
+}
+
 #if !UCONFIG_NO_BREAK_ITERATION && !UCONFIG_NO_FILTERED_BREAK_ITERATION
 static void prtbrks(BreakIterator* brk, const UnicodeString &ustr, IntlTest &it) {
   static const UChar PILCROW=0x00B6, CHSTR=0x3010, CHEND=0x3011; // lenticular brackets
@@ -1432,6 +1557,7 @@ void RBBIAPITest::runIndexedTest( int32_t index, UBool exec, const char* &name, 
     TESTCASE_AUTO(TestGetBinaryRules);
 #endif
     TESTCASE_AUTO(TestRefreshInputText);
+    TESTCASE_AUTO(TestCopyErrorTo);
 #if !UCONFIG_NO_BREAK_ITERATION
     TESTCASE_AUTO(TestFilteredBreakIteratorBuilder);
 #endif

@@ -510,17 +510,26 @@ bool RuleBasedBreakIterator::copyErrorTo(UErrorCode &outErrorCode) const {
 }
 
 void RuleBasedBreakIterator::setText(UText *ut, UErrorCode &status) {
+    clearError();
     if (U_FAILURE(status)) {
+        setError(status, RECOVERABLE_ERROR);
         return;
     }
-    clearError();
     if (copyErrorTo(status)) {
+        return;
+    }
+    if (fData == nullptr) {
+        // This is a default-constructed instance, with no rule data. It can't be used,
+        // other than being assigned to.
+        setError(U_INVALID_STATE_ERROR, RECOVERABLE_ERROR);
+        status = U_INVALID_STATE_ERROR;
         return;
     }
     fBreakCache->reset();
     fDictionaryCache->reset();
     utext_clone(&fText, ut, false, true, &status);
     if (U_FAILURE(status)) {
+        setError(status, RECOVERABLE_ERROR);
         return;
     }
 
@@ -565,6 +574,12 @@ RuleBasedBreakIterator::adoptText(CharacterIterator* newText) {
         // Break iterator is in a permanent error state.
         return;
     }
+    if (fData == nullptr) {
+        // This is a default-constructed instance, with no rule data. It can't be used,
+        // other than being assigned to.
+        setError(U_INVALID_STATE_ERROR, RECOVERABLE_ERROR);
+        return;
+    }
     // If we are holding a CharacterIterator adopted from a
     //   previous call to this function, delete it now.
     fCharIterRelease();
@@ -597,6 +612,12 @@ void
 RuleBasedBreakIterator::setText(const UnicodeString& newText) {
     if (!clearError()) {
         // Break iterator is in a permanent error state.
+        return;
+    }
+    if (fData == nullptr) {
+        // This is a default-constructed instance, with no rule data. It can't be used,
+        // other than being assigned to.
+        setError(U_INVALID_STATE_ERROR, RECOVERABLE_ERROR);
         return;
     }
     // If we are holding a CharacterIterator adopted from a
