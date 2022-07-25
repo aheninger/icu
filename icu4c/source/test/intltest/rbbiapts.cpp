@@ -1168,9 +1168,12 @@ void RBBIAPITest::TestCopyErrorTo() {
     LocalPointer<RuleBasedBreakIterator> bi, bi2;
     UText ut UTEXT_INITIALIZER;
 
-    // Ordinary break iterator from factory should show no error
+    // Ordinary break iterator from factory should show no error.
+    // Skip the rest of the test if this fails. Probably no data.
     bi.adoptInstead((RuleBasedBreakIterator *)BreakIterator::createWordInstance(Locale::getEnglish(), ec));
-    assertSuccess(WHERE, ec);
+    if (!assertSuccess(WHERE, ec)) {
+        return;
+    }
     assertFalse(WHERE, bi->copyErrorTo(ec));
     assertTrue(WHERE, U_SUCCESS(ec));
 
@@ -1185,7 +1188,7 @@ void RBBIAPITest::TestCopyErrorTo() {
     ec = U_ZERO_ERROR;
     bi->setText(s);
     assertFalse(WHERE, bi->copyErrorTo(ec));
-    assertTrue(WHERE, U_SUCCESS(ec));
+    assertSuccess(WHERE, ec);
 
     // SetText with an incoming error code should set bi into a recoverable error state.
     ec = U_ZERO_ERROR;
@@ -1265,7 +1268,7 @@ void RBBIAPITest::TestCopyErrorTo() {
     ec = U_ZERO_ERROR;
     bi.adoptInstead(new RuleBasedBreakIterator(s, pe, ec));
     assertSuccess(WHERE, ec);  // Double-check that s is ok as rules.
-    ec = U_CE_NOT_FOUND_ERROR;
+    ec = U_CE_NOT_FOUND_ERROR;   // Error code unrelated to Break Iterators.
     bi.adoptInstead(new RuleBasedBreakIterator(s, pe, ec));
     assertEquals(WHERE, U_CE_NOT_FOUND_ERROR, ec);
     ec = U_ZERO_ERROR;
@@ -1285,7 +1288,95 @@ void RBBIAPITest::TestCopyErrorTo() {
     assertTrue(WHERE, bi->copyErrorTo(ec));
     assertEquals(WHERE, U_ILLEGAL_ARGUMENT_ERROR, ec);
 
-    // Continue with the rest of the API
+    // Equality - break iterators in an error state are never equal,
+    //            even to themselves.
+    ec = U_ZERO_ERROR;
+    bi.adoptInstead((RuleBasedBreakIterator *)BreakIterator::createWordInstance(Locale::getEnglish(), ec));
+    s.setToBogus();
+    bi->setText(s);
+    assertSuccess(WHERE, ec);
+    assertFalse(WHERE, *bi.getAlias() == *bi.getAlias());
+
+    // Clone of a BI with a transient error works.
+    // Clone of a BI with a permanent error fails (returns nullptr).
+    ec = U_ZERO_ERROR;
+    bi.adoptInstead((RuleBasedBreakIterator *)BreakIterator::createWordInstance(Locale::getEnglish(), ec));
+    s.setToBogus();
+    bi->setText(s);
+    bi2.adoptInstead(bi->clone());
+    assertTrue(WHERE, bi2.isValid());
+    assertTrue(WHERE, bi2->copyErrorTo(ec));
+    assertEquals(WHERE, U_ILLEGAL_ARGUMENT_ERROR, ec);
+    assertFalse(WHERE, *bi.getAlias() == *bi2.getAlias());
+    s = "abc";
+    bi->setText(s);
+    bi2->setText(s);
+    assertTrue(WHERE, *bi.getAlias() == *bi2.getAlias());
+
+    ec = U_ZERO_ERROR;
+    bi.adoptInstead(new RuleBasedBreakIterator(bogusRules, sizeof(bogusRules), ec));
+    assertEquals(WHERE, U_ILLEGAL_ARGUMENT_ERROR, ec);
+    assertTrue(WHERE, nullptr == bi->clone());
+
+    // All variants of setText() and adoptText() should clear errors.
+    // (the tests above rely on setText(UnicodeString) only.)
+    ec = U_ZERO_ERROR;
+    bi.adoptInstead((RuleBasedBreakIterator *)BreakIterator::createWordInstance(Locale::getEnglish(), ec));
+    assertFalse(WHERE, bi->copyErrorTo(ec));
+    s.setToBogus();
+    bi->setText(s);
+    assertTrue(WHERE, bi->copyErrorTo(ec));
+    bi->adoptText(new UCharCharacterIterator(u"hello", 5));
+    ec = U_ZERO_ERROR;
+    assertFalse(WHERE, bi->copyErrorTo(ec));
+
+    bi->setText(s);  // bogus string
+    assertTrue(WHERE, bi->copyErrorTo(ec));
+    ec = U_ZERO_ERROR;
+    utext_openUChars(&ut, u"abc", -1, &ec);
+    assertSuccess(WHERE, ec);
+    bi->setText(&ut, ec);
+    assertSuccess(WHERE, ec);
+    assertFalse(WHERE, bi->copyErrorTo(ec));
+
+    // Iteration and position functions return UBRK_DONE or zero when in an error state.
+    ec = U_ZERO_ERROR;
+    bi.adoptInstead(new RuleBasedBreakIterator(bogusRules, sizeof(bogusRules), ec));
+    assertEquals(WHERE, U_ILLEGAL_ARGUMENT_ERROR, ec);
+
+    assertEquals(WHERE, 0, bi->first());
+    assertEquals(WHERE, 0, bi->last());
+    assertEquals(WHERE, UBRK_DONE, bi->next(3));
+    assertEquals(WHERE, UBRK_DONE, bi->next());
+    assertEquals(WHERE, UBRK_DONE, bi->previous());
+    assertEquals(WHERE, UBRK_DONE, bi->following(0));
+    assertEquals(WHERE, UBRK_DONE, bi->preceding(1));
+    assertTrue(WHERE, bi->isBoundary(0));
+    assertFalse(WHERE, bi->isBoundary(1));
+    assertEquals(WHERE, 0, bi->current());
+
+    assertEquals(WHERE, 0, bi->getRuleStatus());
+    ec = U_ZERO_ERROR;
+    assertEquals(WHERE, 0, bi->getRuleStatusVec(nullptr, 0, ec));
+    assertEquals(WHERE, U_ILLEGAL_ARGUMENT_ERROR, ec);
+
+    // A default constructed break iterator presents a special case: it both has no rule data
+    // and carries no internal error for copyErrorTo().
+    ec = U_ZERO_ERROR;
+    bi.adoptInstead(new RuleBasedBreakIterator());
+    assertFalse(WHERE, bi->copyErrorTo(ec));
+    assertEquals(WHERE, UBRK_DONE, bi->next());
+    assertFalse(WHERE, bi->copyErrorTo(ec));
+    assertSuccess(WHERE, ec);
+
+    // Create a BreakIterator of type FilteredBreakIterator (as opposed to RuleBasedBreakIterator)
+    // and verify that calling copyErrorTo() at least doesn't blow up.
+    ec = U_ZERO_ERROR;
+    Locale loc = Locale::createFromName("en@ss=standard");
+    LocalPointer<BreakIterator>fbi(BreakIterator::createSentenceInstance(loc, ec));
+    assertSuccess(WHERE, ec);
+    assertFalse(WHERE, fbi->copyErrorTo(ec));
+    assertSuccess(WHERE, ec);
 }
 
 #if !UCONFIG_NO_BREAK_ITERATION && !UCONFIG_NO_FILTERED_BREAK_ITERATION

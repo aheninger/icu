@@ -75,17 +75,17 @@ public:
 private:
 
     /**
-      * If this BI is in an error state, this is the associated error code.
+      * The saved error code associated with this break iterator.
+      * This is the value to be returned by copyErrorTo().
       */
     UErrorCode      fErrorCode = U_ZERO_ERROR;
 
     /**
-     *  When in an error state (U_FAILURE(fErrorCode) is true), this flag
-     *  indicates whether the error is permanent, that is, not
-     *  clearable by setText().
+     *  The error state of this break iterator.
+     *  Recoverable errors can be cleared by setText() or assignment.
      */
-    enum EErrorType {RECOVERABLE_ERROR, PERMANENT_ERROR};
-    EErrorType      fPermError = RECOVERABLE_ERROR;
+    enum EErrorType {NO_ERROR, RECOVERABLE_ERROR, PERMANENT_ERROR};
+    EErrorType      fErrorState = NO_ERROR;
 
     /**
       * The current  position of the iterator. Pinned, 0 < fPosition <= text.length.
@@ -338,7 +338,9 @@ public:
      * @return true if both BreakIterators are not same.
      *  @stable ICU 2.0
      */
-    inline bool operator!=(const BreakIterator& that) const;
+    inline bool operator!=(const BreakIterator& that) const {
+        return !operator==(that);
+    }
 
     /**
      * Returns a newly-constructed RuleBasedBreakIterator with the same
@@ -396,8 +398,7 @@ public:
      * </p>
      * <p>
      * When the break iterator is operating on text supplied via a UText,
-     * this function will fail.  Lacking any way to signal failures, it
-     * returns an CharacterIterator containing no text.
+     * this function will fail, returning a CharacterIterator containing no text.
      * The function getUText() provides similar functionality,
      * is reliable, and is more efficient.
      * </p>
@@ -807,16 +808,6 @@ private:
     void dumpTables();
 #endif  /* U_HIDE_INTERNAL_API */
 };
-
-//------------------------------------------------------------------------------
-//
-//   Inline Functions Definitions ...
-//
-//------------------------------------------------------------------------------
-
-inline bool RuleBasedBreakIterator::operator!=(const BreakIterator& that) const {
-    return !operator==(that);
-}
 
 U_NAMESPACE_END
 

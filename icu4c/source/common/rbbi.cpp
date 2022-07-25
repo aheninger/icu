@@ -208,20 +208,29 @@ RuleBasedBreakIterator::RuleBasedBreakIterator( const UnicodeString  &rules,
 
 //-------------------------------------------------------------------------------
 //
-// Default Constructor.      Create an empty shell that can be set up later.
+// Default Constructor.      Create an empty shell that can be assigned to later.
 //                           Used when creating a RuleBasedBreakIterator from a set
 //                           of rules.
 //-------------------------------------------------------------------------------
-RuleBasedBreakIterator::RuleBasedBreakIterator() :
-    RuleBasedBreakIterator(fErrorCode) {
+RuleBasedBreakIterator::RuleBasedBreakIterator() : RuleBasedBreakIterator(fErrorCode) {
+    // Default constructed break iterators are in RECOVERABLE_ERROR state because,
+    // lacking rule data, they need to behave as if in an error state, even though
+    // fErrorCode is U_ZERO_ERROR (returned by copyErrorTo()).
+    if (fErrorState == NO_ERROR) {
+        fErrorState = RECOVERABLE_ERROR;
+    }
 }
 
+/**
+ * Simple Constructor with an error code.
+ * Handles common initialization for all other constructors.
+ */
 RuleBasedBreakIterator::RuleBasedBreakIterator(UErrorCode &status) {
     if (U_FAILURE(status)) {
         setError(status, PERMANENT_ERROR);
         return;
     }
-    utext_openUChars(&fText, NULL, 0, &status);
+    utext_openUChars(&fText, nullptr, 0, &status);
     LocalPointer<DictionaryCache> lpDictionaryCache(new DictionaryCache(this, status), status);
     LocalPointer<BreakCache> lpBreakCache(new BreakCache(this, status), status);
     if (U_FAILURE(status)) {
@@ -348,8 +357,8 @@ RuleBasedBreakIterator::operator=(const RuleBasedBreakIterator& that) {
         }
     }
 
-    setError(that.fErrorCode, that.fPermError);
-    if (U_FAILURE(fErrorCode)) {
+    setError(that.fErrorCode, that.fErrorState);
+    if (fErrorState != NO_ERROR) {
         return *this;
     }
 
@@ -385,18 +394,40 @@ RuleBasedBreakIterator::operator=(const RuleBasedBreakIterator& that) {
 }
 
 
-//-----------------------------------------------------------------------------
-//
-//    setError
-//
-//-----------------------------------------------------------------------------
-void RuleBasedBreakIterator::setError(UErrorCode ec, EErrorType permanent) {
+/*
+ * Error handling functions
+ *
+ * fErrorState is central to the handling of unexpected errors, including memory allocation
+ *             failures, during the construction and use of RuleBasedBreakIterators.
+ *
+ *    NO_ERROR:           the break iterator has no problems, and is ready for use.
+ *    RECOVERABLE_ERROR:  A transient problem occured that can be cleared with
+ *                        setText() or by the assignment operator.
+ *    PERMANENT_ERROR:    An unrecoverable problem has occured. All methods will take no action,
+ *                        returning safe default values.
+ *
+ * fErrorCode is the UErrorCode value to be returned via copyErrorTo().
+ *
+ * Note that an interesting edge case - a default constructed break iterator has
+ * fErrorCode == U_ZERO_ERROR because no error has occured from the callers perspective, but
+ * fErrorState showing an error because, without rule data, the break iterator is unusable.
+ */
+
+bool RuleBasedBreakIterator::copyErrorTo(UErrorCode &outErrorCode) const {
+    if (U_FAILURE(outErrorCode)) {
+        return true;
+    }
+    outErrorCode = fErrorCode;
+    return U_FAILURE(fErrorCode);
+}
+
+void RuleBasedBreakIterator::setError(UErrorCode ec, EErrorType errorType) {
     // Do not overwrite an existing permanent error.
-    // Do not overwrite an existing resettable error with another resettable one.
+    // Do not overwrite an existing recoverable error with another recoverable one.
     if (U_SUCCESS(fErrorCode) ||
-            (fPermError == RECOVERABLE_ERROR && permanent == PERMANENT_ERROR)) {
+            (fErrorState == RECOVERABLE_ERROR && errorType == PERMANENT_ERROR)) {
         fErrorCode = ec;
-        fPermError = permanent;
+        fErrorState = errorType;
         // Avoid retaining references to user supplied text.
         utext_close(&fText);
         fCharIterRelease();
@@ -409,15 +440,15 @@ void RuleBasedBreakIterator::setError(UErrorCode ec, EErrorType permanent) {
     }
 }
 
-
 bool RuleBasedBreakIterator::clearError() {
-    if (U_SUCCESS(fErrorCode)) {
-        return true;
-    }
-    if (fPermError == PERMANENT_ERROR) {
+    if (fErrorState == PERMANENT_ERROR) {
         return false;
     }
     fErrorCode = U_ZERO_ERROR;
+    // Note: fData will be nullptr on a default constructed instance.
+    //       fErrorState must then be kept in an error state to prevent any
+    //       subsequent attempt to reference the non-existant data.
+    fErrorState = fData ? NO_ERROR : RECOVERABLE_ERROR;
     return true;
 }
 
@@ -435,7 +466,7 @@ RuleBasedBreakIterator::clone() const {
     }
     // Ignore transient errors (those clearable by setText()).
     // For permanent errors, fail by returning nullptr.
-    if (U_FAILURE(lpResult->fErrorCode) && lpResult->fPermError == PERMANENT_ERROR) {
+    if (U_FAILURE(lpResult->fErrorCode) && lpResult->fErrorState == PERMANENT_ERROR) {
         return nullptr;
     }
     return lpResult.orphan();
@@ -501,13 +532,6 @@ RuleBasedBreakIterator::hashCode(void) const {
     return hash;
 }
 
-bool RuleBasedBreakIterator::copyErrorTo(UErrorCode &outErrorCode) const {
-    if (U_FAILURE(outErrorCode)) {
-        return true;
-    }
-    outErrorCode = fErrorCode;
-    return U_FAILURE(fErrorCode);
-}
 
 void RuleBasedBreakIterator::setText(UText *ut, UErrorCode &status) {
     clearError();
@@ -684,7 +708,7 @@ RuleBasedBreakIterator &RuleBasedBreakIterator::refreshInputText(UText *input, U
  * @return The new iterator position, which is zero.
  */
 int32_t RuleBasedBreakIterator::first(void) {
-    if (U_FAILURE(fErrorCode)) {
+    if (fErrorState != NO_ERROR) {
         return 0;
     }
     UErrorCode status = U_ZERO_ERROR;
@@ -705,7 +729,7 @@ int32_t RuleBasedBreakIterator::first(void) {
  * @return The text's past-the-end offset.
  */
 int32_t RuleBasedBreakIterator::last(void) {
-    if (U_FAILURE(fErrorCode)) {
+    if (fErrorState != NO_ERROR) {
         return 0;
     }
     int32_t endPos = (int32_t)utext_nativeLength(&fText);
@@ -746,7 +770,7 @@ int32_t RuleBasedBreakIterator::next(int32_t n) {
  * @return The position of the first boundary after this one.
  */
 int32_t RuleBasedBreakIterator::next(void) {
-    if (fBreakCache == nullptr) {
+    if (fErrorState != NO_ERROR) {
         return UBRK_DONE;
     }
     fBreakCache->next();
@@ -762,7 +786,7 @@ int32_t RuleBasedBreakIterator::next(void) {
  * @return The position of the boundary position immediately preceding the starting position.
  */
 int32_t RuleBasedBreakIterator::previous(void) {
-    if (fBreakCache == nullptr) {
+    if (fErrorState != NO_ERROR) {
         return UBRK_DONE;
     }
     UErrorCode status = U_ZERO_ERROR;
@@ -781,7 +805,7 @@ int32_t RuleBasedBreakIterator::previous(void) {
  * @return The position of the first break after the current position.
  */
 int32_t RuleBasedBreakIterator::following(int32_t startPos) {
-    if (U_FAILURE(fErrorCode)) {
+    if (fErrorState != NO_ERROR) {
         return UBRK_DONE;
     }
     // if the supplied position is before the beginning, return the
@@ -811,7 +835,7 @@ int32_t RuleBasedBreakIterator::following(int32_t startPos) {
  * @return The position of the last boundary before the starting position.
  */
 int32_t RuleBasedBreakIterator::preceding(int32_t offset) {
-    if (U_FAILURE(fErrorCode)) {
+    if (fErrorState != NO_ERROR) {
         return UBRK_DONE;
     }
     if (offset > utext_nativeLength(&fText)) {
@@ -887,7 +911,7 @@ UBool RuleBasedBreakIterator::isBoundary(int32_t offset) {
  * @return The current iteration position.
  */
 int32_t RuleBasedBreakIterator::current(void) const {
-    if (U_FAILURE(fErrorCode)) {
+    if (fErrorState != NO_ERROR) {
         return 0;
     }
     return fPosition;
@@ -1236,6 +1260,9 @@ int32_t RuleBasedBreakIterator::handleSafePrevious(int32_t fromPosition) {
 //-------------------------------------------------------------------------------
 
 int32_t  RuleBasedBreakIterator::getRuleStatus() const {
+    if (fErrorState != NO_ERROR) {
+        return 0;
+    }
 
     // fLastRuleStatusIndex indexes to the start of the appropriate status record
     //                                                 (the number of status values.)
@@ -1249,7 +1276,7 @@ int32_t  RuleBasedBreakIterator::getRuleStatus() const {
 
 int32_t RuleBasedBreakIterator::getRuleStatusVec(
              int32_t *fillInVec, int32_t capacity, UErrorCode &status) {
-    if (U_FAILURE(status) || U_FAILURE(fErrorCode)) {
+    if (copyErrorTo(status)) {
         return 0;
     }
 
@@ -1311,9 +1338,7 @@ U_NAMESPACE_END
 
 
 static icu::UStack *gLanguageBreakFactories = nullptr;
-static const icu::UnicodeString *gEmptyString = nullptr;
 static icu::UInitOnce gLanguageBreakFactoriesInitOnce {};
-static icu::UInitOnce gRBBIInitOnce {};
 
 /**
  * Release all static memory held by breakiterator.
@@ -1322,10 +1347,7 @@ U_CDECL_BEGIN
 UBool U_CALLCONV rbbi_cleanup(void) {
     delete gLanguageBreakFactories;
     gLanguageBreakFactories = nullptr;
-    delete gEmptyString;
-    gEmptyString = nullptr;
     gLanguageBreakFactoriesInitOnce.reset();
-    gRBBIInitOnce.reset();
     return true;
 }
 U_CDECL_END
@@ -1336,12 +1358,6 @@ static void U_CALLCONV _deleteFactory(void *obj) {
 }
 U_CDECL_END
 U_NAMESPACE_BEGIN
-
-static void U_CALLCONV rbbiInit() {
-    // TODO: move debug init into here?
-    gEmptyString = new UnicodeString();
-    ucln_common_registerCleanup(UCLN_COMMON_RBBI, rbbi_cleanup);
-}
 
 static void U_CALLCONV initLanguageFactories() {
     UErrorCode status = U_ZERO_ERROR;
@@ -1394,7 +1410,7 @@ RuleBasedBreakIterator::getLanguageBreakEngine(UChar32 c) {
     UErrorCode status = U_ZERO_ERROR;
 
     if (fLanguageBreakEngines == NULL) {
-        fLanguageBreakEngines = new UStack(status);
+        fLanguageBreakEngines = new UStack(status);    // TODO: use LocalPointer.
         if (fLanguageBreakEngines == NULL || U_FAILURE(status)) {
             delete fLanguageBreakEngines;
             fLanguageBreakEngines = 0;
@@ -1466,8 +1482,8 @@ RuleBasedBreakIterator::getRules() const {
     if (fData != NULL) {
         return fData->getRuleSourceString();
     } else {
-        umtx_initOnce(gRBBIInitOnce, &rbbiInit);
-        return *gEmptyString;
+        static UnicodeString *emptyString = STATIC_NEW(UnicodeString);
+        return *emptyString;
     }
 }
 
