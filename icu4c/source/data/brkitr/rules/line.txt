@@ -23,6 +23,19 @@
 !!chain;
 !!quoted_literals_only;
 
+# Prototype definitions for L2/22-080R
+# Line breaking at orthographic syllable boundaries
+
+$AK = [\u1B05-\u1B33 \u1B45-\u1B4C \u25CC \uA984-\uA9B2 \U00011005-\U00011037 \U00011071-\U00011072 \U00011075 \U00011305-\U0001130C \U0001130F-\U00011310 \U00011313-\U00011328 \U0001132A-\U00011330 \U00011332-\U00011333 \U00011335-\U00011339 \U00011360-\U00011361 \U00011392-\U000113B5 \U00011F04-\U00011F10 \U00011F12-\U00011F33];
+
+$AP = [\U00011003-\U00011004 \U000113D1 \U00011F02];
+
+$AS = [\u1BC0-\u1BE5 \uAA00-\uAA28 \U00011066-\U0001106F \U00011350 \U0001135E-\U0001135F \U00011380-\U00011389 \U0001138B \U0001138E \U00011390-\U00011391 \U00011EE0-\U00011EF1 \U00011F50-\U00011F59];
+
+$VF = [\u1BF2-\u1BF3];
+
+$VI = [\u1B44 \uA9C0 \U00011046 \U0001134D \U000113D0 \U00011F42];
+
 $AI = [:LineBreak =  Ambiguous:];
 $AL = [:LineBreak =  Alphabetic:];
 $BA = [:LineBreak =  Break_After:];
@@ -82,7 +95,7 @@ $ExtPictUnassigned = [\p{Extended_Pictographic} & \p{Cn}];
 #         list it in the numerous rules that use CM.
 # By LB1, SA characters with general categor of Mn or Mc also resolve to CM.
 
-$CM = [[:LineBreak = Combining_Mark:] $ZWJ [$SA & [[:Mn:][:Mc:]]]];
+$CM = [[[:LineBreak = Combining_Mark:] $ZWJ [$SA & [[:Mn:][:Mc:]]]] - [$VF $VI]];
 $CMX = [[$CM] - [$ZWJ]];
 
 #   Dictionary character set, for triggering language-based break engines. Currently
@@ -97,7 +110,7 @@ $dictionary = [$SA];
 #                               XX  (Unknown, unassigned)
 #                         as $AL  (Alphabetic)
 #
-$ALPlus = [$AL $AI $SG $XX [$SA-[[:Mn:][:Mc:]]]];
+$ALPlus = [[$AL $AI $SG $XX [$SA-[[:Mn:][:Mc:]]]] - [$AS $AK $AP]];
 
 
 ## -------------------------------------------------
@@ -337,6 +350,9 @@ $PR $CM* ($JL | $JV | $JT | $H2 | $H3);
 #
 ($ALPlus | $HL) $CM* ($ALPlus | $HL);
 ^$CM+ ($ALPlus | $HL);      # The $CM+ is from rule 10, an unattached CM is treated as AL
+
+#LB 28b  Do not break Orthographic syllables
+($AP $CM*)? ($AS | $AK) ($CM* $VI $CM* $AK)* ($CM* $VI | (($CM* $AS | $CM* $AK)? $CM* $VF))?;
 
 # LB 29
 $IS $CM* ($ALPlus | $HL);

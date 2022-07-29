@@ -2631,6 +2631,11 @@ private:
     UnicodeSet  *fOP30;
     UnicodeSet  *fCP30;
     UnicodeSet  *fExtPictUnassigned;
+    UnicodeSet  *fAK;
+    UnicodeSet  *fAP;
+    UnicodeSet  *fAS;
+    UnicodeSet  *fVF;
+    UnicodeSet  *fVI;
 
     BreakIterator        *fCharBI;
     const UnicodeString  *fText;
@@ -2701,6 +2706,16 @@ RBBILineMonkey::RBBILineMonkey() :
     fCP30  = new UnicodeSet(u"[\\p{Line_break=CP}-[\\p{ea=F}\\p{ea=W}\\p{ea=H}]]", status);
     fExtPictUnassigned = new UnicodeSet(u"[\\p{Extended_Pictographic}&\\p{Cn}]", status);
 
+    fAK    = new UnicodeSet(
+        u"[\u1B05-\u1B33\u1B45-\u1B4C\u25CC\uA984-\uA9B2\U00011005-\U00011037\U00011071-\U00011072\U00011075\U00011305-\U0001130C\U0001130F-\U00011310\U00011313-\U00011328\U0001132A-\U00011330\U00011332-\U00011333\U00011335-\U00011339\U00011360-\U00011361\U00011392-\U000113B5\U00011F04-\U00011F10\U00011F12-\U00011F33]",
+        status);
+    fAP    = new UnicodeSet(u"[\U00011003-\U00011004\U000113D1\U00011F02]", status);
+    fAS    = new UnicodeSet(
+        u"[\u1BC0-\u1BE5\uAA00-\uAA28\U00011066-\U0001106F\U00011350\U0001135E-\U0001135F\U00011380-\U00011389\U0001138B\U0001138E\U00011390-\U00011391\U00011EE0-\U00011EF1\U00011F50-\U00011F59]",
+        status);
+    fVF = new UnicodeSet(u"[\u1BF2-\u1BF3]", status);
+    fVI = new UnicodeSet(u"[\u1B44\uA9C0\U00011046\U0001134D\U000113D0\U00011F42]", status);
+
     if (U_FAILURE(status)) {
         deferredStatus = status;
         return;
@@ -2714,6 +2729,12 @@ RBBILineMonkey::RBBILineMonkey() :
     fCM->addAll(*fZWJ);    // ZWJ behaves as a CM.
 
     fHH->add(u'\u2010');   // Hyphen, '‐'
+
+    fAL->removeAll(*fAK);
+    fAL->removeAll(*fAP);
+    fAL->removeAll(*fAS);
+    fCM->removeAll(*fVF);
+    fCM->removeAll(*fVI);
 
     // Sets and names.
     fSets->addElement(fBK, status); classNames.push_back("fBK");
@@ -2760,18 +2781,27 @@ RBBILineMonkey::RBBILineMonkey() :
     fSets->addElement(fOP30, status); classNames.push_back("fOP30");
     fSets->addElement(fCP30, status); classNames.push_back("fCP30");
     fSets->addElement(fExtPictUnassigned, status); classNames.push_back("fExtPictUnassigned");
+    fSets->addElement(fAK, status); classNames.push_back("fAK");
+    fSets->addElement(fAP, status); classNames.push_back("fAP");
+    fSets->addElement(fAS, status); classNames.push_back("fAS");
+    fSets->addElement(fVF, status); classNames.push_back("fVF");
+    fSets->addElement(fVI, status); classNames.push_back("fVI");
 
-    const char *rules =
-            "((\\p{Line_Break=PR}|\\p{Line_Break=PO})(\\p{Line_Break=CM}|\\u200d)*)?"
-            "((\\p{Line_Break=OP}|\\p{Line_Break=HY})(\\p{Line_Break=CM}|\\u200d)*)?"
-            "((\\p{Line_Break=IS})(\\p{Line_Break=CM}|\\u200d)*)?"
-            "\\p{Line_Break=NU}(\\p{Line_Break=CM}|\\u200d)*"
-            "((\\p{Line_Break=NU}|\\p{Line_Break=IS}|\\p{Line_Break=SY})(\\p{Line_Break=CM}|\\u200d)*)*"
-            "((\\p{Line_Break=CL}|\\p{Line_Break=CP})(\\p{Line_Break=CM}|\\u200d)*)?"
-            "((\\p{Line_Break=PR}|\\p{Line_Break=PO})(\\p{Line_Break=CM}|\\u200d)*)?";
 
-    fNumberMatcher = new RegexMatcher(
-        UnicodeString(rules, -1, US_INV), 0, status);
+    // Hack for orthographic syllable prototype, to adjust CM property for use in numeric regexp.
+    //    Note that 200d adjustment is permanent.
+
+    UnicodeString CMx {u"[[[\\p{Line_Break=CM}]\\u200d]-[\\u1BF2-\\u1BF3\\u1B44\\uA9C0\\U00011046\\U0001134D\\U000113D0\\U00011F42]]"};
+    UnicodeString rules;
+    rules = rules + u"((\\p{Line_Break=PR}|\\p{Line_Break=PO})(" + CMx + u")*)?"
+                  + u"((\\p{Line_Break=OP}|\\p{Line_Break=HY})(" + CMx + u")*)?"
+                  + u"((\\p{Line_Break=IS})(" + CMx + u")*)?"
+                  + u"\\p{Line_Break=NU}(" + CMx + u")*"
+                  + u"((\\p{Line_Break=NU}|\\p{Line_Break=IS}|\\p{Line_Break=SY})(" + CMx + u")*)*"
+                  + u"((\\p{Line_Break=CL}|\\p{Line_Break=CP})(" + CMx + u")*)?"
+                  + u"((\\p{Line_Break=PR}|\\p{Line_Break=PO})(" + CMx + u")*)?";
+
+    fNumberMatcher = new RegexMatcher(rules, 0, status);
 
     fCharBI = BreakIterator::createCharacterInstance(Locale::getEnglish(), status);
 
@@ -3263,9 +3293,37 @@ int32_t RBBILineMonkey::next(int32_t startPos) {
             continue;
         }
 
-          if (fIS->contains(prevChar) && (fAL->contains(thisChar) || fHL->contains(thisChar))) {
-              setAppliedRule(pos, "LB 29  Do not break between numeric punctuation and alphabetics (\"e.g.\").");
-              continue;
+        if (fAP->contains(prevChar) && (fAK->contains(thisChar) || fAS->contains(thisChar))) {
+            setAppliedRule(pos, "LB 28b.1  AP x (AK | AS)");
+            continue;
+        }
+
+        if ((fAK->contains(prevChar) || fAS->contains(prevChar)) &&
+            (fVF->contains(thisChar) || fVI->contains(thisChar))) {
+            setAppliedRule(pos, "LB 28b.2  (AK | AS) x (VF | VI)");
+            continue;
+        }
+
+        if ((fAK->contains(prevCharX2) || fAS->contains(prevCharX2)) &&
+            fVI->contains(prevChar) && fAK->contains(thisChar)) {
+            setAppliedRule(pos, "LB 28b.3  (AK | AS) VI x AK");
+            continue;
+        }
+
+        if (nextPos < fText->length()) {
+            // note: UnicodeString::char32At(length) returns ffff, not distinguishable
+            //       from a legit ffff character. So test length separately.
+            UChar32 nextChar = fText->char32At(nextPos);
+            if ((fAK->contains(prevChar) || fAS->contains(prevChar)) &&
+                (fAK->contains(thisChar) || fAS->contains(thisChar)) && fVF->contains(nextChar)) {
+                setAppliedRule(pos, "LB 28b.4  (AK | AS) x (AK | AS) VF");
+                continue;
+            }
+        }
+
+        if (fIS->contains(prevChar) && (fAL->contains(thisChar) || fHL->contains(thisChar))) {
+            setAppliedRule(pos, "LB 29  Do not break between numeric punctuation and alphabetics (\"e.g.\").");
+            continue;
         }
 
         //          (AL | NU) x OP
@@ -3366,6 +3424,11 @@ RBBILineMonkey::~RBBILineMonkey() {
     delete fOP30;
     delete fCP30;
     delete fExtPictUnassigned;
+    delete fAK;
+    delete fAP;
+    delete fAS;
+    delete fVF;
+    delete fVI;
 
     delete fCharBI;
     delete fNumberMatcher;
