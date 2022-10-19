@@ -241,13 +241,13 @@ RuleBasedBreakIterator::RuleBasedBreakIterator(UErrorCode &status) {
     fBreakCache = lpBreakCache.orphan();
 
 #ifdef RBBI_DEBUG
-    static UBool debugInitDone = FALSE;
-    if (debugInitDone == FALSE) {
+    static UBool debugInitDone = false;
+    if (debugInitDone == false) {
         char *debugEnv = getenv("U_RBBIDEBUG");
         if (debugEnv && uprv_strstr(debugEnv, "trace")) {
-            gTrace = TRUE;
+            gTrace = true;
         }
-        debugInitDone = TRUE;
+        debugInitDone = true;
     }
 #endif
 }
