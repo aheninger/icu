@@ -385,21 +385,23 @@ U_NAMESPACE_END
  * BreakIterator is placed in an error state, which can be checked later
  * with this function.
  *
- * Errors during use of a break iterator are not normally expected. They
- * can be caused by memory allocation failures, or by problems with the
- * dynamic loading of the dictionary data used by word or line break.
+ * Errors during use of a break iterator are not normally expected.
+ * They can be caused by memory allocation failures, by errors while
+ * accessing the text being iterated over, or by failures in loading the
+ * break iterator's underlying data.
  *
  * While in an error state, the BreakIterator iteration functions,
  * including `ubrk_next()` and `ubrk_previous()`, will return `UBRK_DONE`.
  * All other functions will safely take no action.
  *
- * The error state is sticky; it cannot be cleared. All that can be done
- * with an error-state UBreakIterator is to close it.
+ * Clearing the error state: the `ubrk_setText()` functions will clear
+ * the error state, if possible.  Not all errors can be cleared;
+ * data loading and memory allocation errors will usually be permanent.
  *
  * @param   bi The UBreakIterator to check
  * @param   outErrorCode Set to an error code if it does not contain one already.
  * @return  true if `U_FAILURE(*outErrorCode)` when the function returns.
- * @draft ICU 72
+ * @draft ICU 73
  */
 U_CAPI bool U_EXPORT2
 ubrk_copyErrorTo(const UBreakIterator* bi,

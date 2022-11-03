@@ -96,19 +96,22 @@ U_NAMESPACE_BEGIN
  * Error Handling: Most of the BreakIterator API functions do not take an
  * ICU UErrorCode parameter for reporting error conditions to the caller.
  * Instead, in the event that a function cannot complete normally, the
- * BreakIterator is placed in a "bogus" state, which can be checked later
- * with the function `BreakIterator::isBogus()`.
+ * BreakIterator is placed in an error state, which can be checked later
+ * with the function `BreakIterator::copyErrorTo()`.
  *
- * Errors during the use of a break iterator are not normally expected. They
- * can be caused by memory allocation failures, or by problems with the
- * dynamic loading of the dictionary data used by word or line break.
+ * Errors during the use of a break iterator are not normally expected.
+ * They can be caused by memory allocation failures, by errors while
+ * accessing the text being iterated over, or by failures in loading the
+ * break iterator's underlying data.
  *
- * While in a bogus state, the BreakIterator iterations functions,
+ * While in an error state, the BreakIterator iterations functions,
  * e.g. `next()` or `previous()` will return `BreakIterator::DONE`.
  * All other functions will safely take no action.
  *
- * The bogus state is sticky; it cannot be cleared. All that can be done
- * with a bogus BreakIterator is to delete it.
+ * Clearing the error state: the `setText()` functions and the
+ * assignment operator will clear the error state, if possible.
+ * Not all errors can be cleared; data loading and memory allocation
+ * errors will usually be permanent.
  * <p>
  * In addition to the C++ API defined in this header file, a
  * plain C API with equivalent functionality is defined in the
