@@ -81,6 +81,13 @@ private:
     UErrorCode      fErrorCode = U_ZERO_ERROR;
 
     /**
+     *  The error state of this break iterator.
+     *  Recoverable errors can be cleared by setText() or assignment.
+     */
+    enum EErrorType {NO_ERROR, RECOVERABLE_ERROR, PERMANENT_ERROR};
+    EErrorType      fErrorState = NO_ERROR;
+
+    /**
       * The current  position of the iterator. Pinned, 0 < fPosition <= text.length.
       * Never has the value UBRK_DONE (-1).
       */
@@ -132,7 +139,8 @@ private:
     /**
      *   A character iterator that refers to the same text as the UText, above.
      *   Only included for compatibility with old API, which was based on CharacterIterators.
-     *   Value may be adopted from outside, or one of fSCharIter or fDCharIter, below.
+     *   Value may be adopted from outside, or fSCharIter, below.
+     *   Constraint: never nullptr. Storage owned by break iterator unless == &fSCharIter.
      */
     CharacterIterator  *fCharIter = &fSCharIter;
 
@@ -142,6 +150,12 @@ private:
      *    implementation of getText(), a backwards compatibility issue.
      */
     UCharCharacterIterator fSCharIter {u"", 0};
+
+    /** return true if fCharIter was adopted from the outside. */
+    bool fCharIterAdopted() const { return fCharIter != &fSCharIter; };
+
+    /** Delete and reset to default fCharIter if it was adopted from outside. */
+    void fCharIterRelease();
 
     /**
       * True when iteration has run off the end, and iterator functions should return UBRK_DONE.
@@ -338,7 +352,16 @@ public:
     // BreakIterator overrides
     //=======================================================================
 
-    /**
+   /**
+     * Sets the UErrorCode if an error occurred while using the BreakIterator.
+     * Preserves older error codes in the outErrorCode.
+     * @param   outErrorCode Set to an error code if it does not contain one already.
+     * @return  true if `U_FAILURE(outErrorCode)` when the function returns.
+     * @draft ICU 73
+     */
+    virtual bool copyErrorTo(UErrorCode &outErrorCode) const override;
+
+   /**
      * <p>
      * Return a CharacterIterator over the text being analyzed.
      * The returned character iterator is owned by the break iterator, and must
@@ -719,6 +742,26 @@ private:
      * @internal (private)
      */
     const LanguageBreakEngine *getLanguageBreakEngine(UChar32 c);
+
+
+   /**
+     *  Put this break iterator into a recoverable error state.
+     *  setText() will clear the error.
+     *  @internal
+     */
+    void setError(UErrorCode ec, EErrorType permanent);
+
+    /**
+     * Clear an error, if possible.
+     * After calling this function, fErrorCode will reflect the
+     * error state, indicating success if an error was succesfullly
+     * cleared, or if there was no error in the first place.
+     *
+     * @return true if the error was succesfully cleared, or there
+     *         was no error in the first place.
+     * @internal
+     */
+    bool clearError();
 
   public:
 #ifndef U_HIDE_INTERNAL_API
