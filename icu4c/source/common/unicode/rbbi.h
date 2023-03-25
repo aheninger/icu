@@ -357,7 +357,7 @@ public:
      * Preserves older error codes in the outErrorCode.
      * @param   outErrorCode Set to an error code if it does not contain one already.
      * @return  true if `U_FAILURE(outErrorCode)` when the function returns.
-     * @draft ICU 73
+     * @draft ICU 74
      */
     virtual bool copyErrorTo(UErrorCode &outErrorCode) const override;
 

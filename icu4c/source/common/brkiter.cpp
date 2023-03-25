@@ -222,6 +222,15 @@ BreakIterator::~BreakIterator()
 {
 }
 
+/*
+ * copyErrorTo() default implementation. Will be used by any BreakIterator subclassses
+ * that pre-date the introduction of this function and have not yet been updated to support it.
+ */
+bool BreakIterator::copyErrorTo(UErrorCode &ec) const {
+    return U_FAILURE(ec);
+}
+
+
 // ------------------------------------------
 //
 // Registration

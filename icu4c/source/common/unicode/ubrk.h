@@ -401,7 +401,7 @@ U_NAMESPACE_END
  * @param   bi The UBreakIterator to check
  * @param   outErrorCode Set to an error code if it does not contain one already.
  * @return  true if `U_FAILURE(*outErrorCode)` when the function returns.
- * @draft ICU 73
+ * @draft ICU 74
  */
 U_CAPI bool U_EXPORT2
 ubrk_copyErrorTo(const UBreakIterator* bi,
