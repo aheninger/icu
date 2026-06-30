@@ -109,6 +109,7 @@ void RegexTest::runIndexedTest( int32_t index, UBool exec, const char* &name, ch
     TESTCASE_AUTO(TestBug20359);
     TESTCASE_AUTO(TestBug20863);
     TESTCASE_AUTO(TestBug23143);
+    TESTCASE_AUTO(TestBug23344);
     TESTCASE_AUTO_END;
 }
 
@@ -5932,5 +5933,55 @@ void RegexTest::TestBug20863() {
 
 }
 
+void RegexTest::TestBug23344() {
+#if 0
+    const char16_t *pattern = u".*A";
+    char16_t text[]    = { 0xDADA, 0xDC5A, 0xDA00, 0x0000 };
+    UErrorCode status = U_ZERO_ERROR;
+    UParseError pe;
+    URegularExpression *re = uregex_open(pattern, 3, 0, &pe, &status);
+    if (!assertSuccess(WHERE, status)) {return;}
+    uregex_setText(re, text, 4, &status);
+    assertSuccess(WHERE, status);
+    uregex_find(re, 1, &status);
+    assertSuccess(WHERE, status);
+    UChar buf[256];
+    status = U_ZERO_ERROR;
+    uregex_group(re, 0, buf, 256, &status);  // writes buf[-N]
+    uregex_close(re);
+#endif
+#if 0
+    const char16_t pattern[] { u".*A" };
+    const char16_t text[] { 0xDADA, 0xDC5A, 0xDA00, 0x0000 };
+    UErrorCode status = U_ZERO_ERROR;
+    UParseError pe;
+    URegularExpression *re = uregex_open(pattern, -1, 0, &pe, &status);
+    if (!assertSuccess(WHERE, status)) {return;}
+    uregex_setText(re, text, -1, &status);
+    assertSuccess(WHERE, status);
+    uregex_find(re, 1, &status);
+    assertSuccess(WHERE, status);
+    UChar buf[256];
+    status = U_ZERO_ERROR;
+    uregex_group(re, 0, buf, 256, &status);  // writes buf[-N]
+    uregex_close(re);
+#endif
+    UnicodeString pattern { u".*A" };
+    const char16_t texta[] {0xDADA, 0xDC5A, 0xDA00, 0x0000};
+    UnicodeString text {texta};
+    UErrorCode status = U_ZERO_ERROR;
+    UParseError pe;
+    LocalPointer<RegexPattern> re(RegexPattern::compile(pattern, 0, pe, status));
+    if (!assertSuccess(WHERE, status)) {return;}
+    LocalPointer<RegexMatcher> matcher(re->matcher(text, status));
+    if (!assertSuccess(WHERE, status)) {return;}
+
+    bool foundMatch = matcher->find(1, status);
+    assertSuccess(WHERE, status);
+    assertFalse(WHERE, foundMatch);
+    status = U_ZERO_ERROR;
+    UnicodeString g {matcher->group(0, status)};
+    assertEquals(WHERE, 0, g.length());
+}
 
 #endif  /* !UCONFIG_NO_REGULAR_EXPRESSIONS  */
